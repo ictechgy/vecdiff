@@ -77,5 +77,9 @@ vecdiff /tmp/vecdemo/snapA /tmp/vecdemo/snapB --full --json r.json --markdown r.
   built as `v + ε·v̂` is *parallel* → cosine exactly 1.0; scaling k outlier rows can leave
   their z-scores below 3 because the outliers inflate the population std — give outliers
   identical norms instead. See comments in `tests/test_checks.py`.
+- Never assert at an exact float boundary: N4 scores are float32 blocked matmuls whose
+  rounding differs across BLAS implementations (macOS Accelerate vs Linux OpenBLAS), so
+  a threshold exactly equal to a float64-computed cosine can miss by one ulp on CI.
+  Use a small margin (bit us on the first-ever Linux CI run).
 - `tests/test_demo.py` runs the demo script via subprocess with `PYTHONPATH=src` so it
   works from a source checkout without install.
