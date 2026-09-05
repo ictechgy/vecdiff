@@ -238,14 +238,14 @@ def test_n4_threshold_respected():
     b[11] = unit + np.float32(0.15) * perp
     cos = float(np.dot(unit, b[11] / np.linalg.norm(b[11])))
     assert cos < 0.999
-        stats, _ = checks.check_n4(make_snapshot(ids, b), "B", threshold=0.999)
-        assert stats["pairs"] == 0
-        # lowering the threshold catches it — with a margin: check_n4 scores
-        # in float32 blocked matmuls, whose rounding differs across BLAS
-        # implementations, so a threshold exactly equal to the float64 cos
-        # can sit a hair above the float32 similarity (bit us on Linux CI)
-        stats2, _ = checks.check_n4(make_snapshot(ids, b), "B", threshold=cos - 1e-6)
-        assert stats2["pairs"] >= 1
+    stats, _ = checks.check_n4(make_snapshot(ids, b), "B", threshold=0.999)
+    assert stats["pairs"] == 0
+    # lowering the threshold catches it — with a margin: check_n4 scores
+    # in float32 blocked matmuls, whose rounding differs across BLAS
+    # implementations, so a threshold exactly equal to the float64 cos
+    # can sit a hair above the float32 similarity (bit us on Linux CI)
+    stats2, _ = checks.check_n4(make_snapshot(ids, b), "B", threshold=cos - 1e-6)
+    assert stats2["pairs"] >= 1
 
 
 def test_n4_zero_duplicates_green():
