@@ -1,12 +1,9 @@
 # HANDOFF — what the next session should do
 
-State at writing: v0.2.0 **published on PyPI** (`pip install vecdiff`,
-release https://github.com/ictechgy/vecdiff/releases/tag/v0.2.0), 12 commits,
-76/76 tests green, clean tree, repo public with CI green on 3.10 + 3.13.
-Read `AGENTS.md` first (invariants, judgment discipline, test gotchas). (The original
-Korean planning doc lives outside the repo — local `기획서.md`, gitignored; it was
-stripped from history with `git filter-repo` before going public, backup bundle at
-`/tmp/vecdiff-pre-filter.bundle`.)
+State at writing: v0.3.0 **published on PyPI** (N5 + Q1 + N3;
+https://github.com/ictechgy/vecdiff/releases/tag/v0.3.0), 15 commits,
+96/96 tests green (+1 intended skip), clean tree, repo public with CI
+green on 3.10 + 3.13
 
 ## 1. Do first — dogfood and capture the launch story
 
