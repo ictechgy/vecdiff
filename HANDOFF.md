@@ -1,7 +1,8 @@
 # HANDOFF — what the next session should do
 
 State at writing: v0.1.0, 3 commits, 49/49 tests green, clean tree, **no remote, not on PyPI**.
-Read `AGENTS.md` first (invariants, judgment discipline, test gotchas), `기획서.md` for vision.
+Read `AGENTS.md` first (invariants, judgment discipline, test gotchas). (The original
+Korean planning doc lives outside the repo — local `기획서.md`, gitignored.)
 
 ## 1. Do first — dogfood and capture the launch story
 
@@ -10,7 +11,7 @@ Read `AGENTS.md` first (invariants, judgment discipline, test gotchas), `기획�
       real snapshots (e.g. current index vs a candidate new embedding model) via the
       native adapter, run `vecdiff --full --json --markdown`, and keep the full report.
 - [ ] That report becomes the README/launch case study ("N1 flagged X chunks concentrated
-      in src/auth; N4 caught Y re-chunking duplicates") — the 기획서 first-publication
+      in src/auth; N4 caught Y re-chunking duplicates") — the launch
       strategy explicitly calls for one real case, and the re-embedding guide blogs
       (no diff tool exists) are the natural citation path. **Scrub filesystem paths from
       the report before publishing** (reports embed absolute paths).
@@ -22,7 +23,7 @@ Read `AGENTS.md` first (invariants, judgment discipline, test gotchas), `기획�
       library function and a Rust `VecDiff` enum — no CLI tool), but re-check
       pypi.org before upload. Keep `uv build` in the release flow (verified working).
 
-## 3. v0.2 — adapter + supervised line (from 기획서)
+## 3. v0.2 — adapter + supervised line
 
 - [x] **Any-vector-DB support shipped (v0.1.x)**: jsonl adapter (stdlib, gz-capable,
       path-aware) + `snapshot_from_arrays()` in-memory API + `docs/export_recipes.md`
