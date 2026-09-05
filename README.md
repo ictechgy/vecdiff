@@ -7,7 +7,8 @@ Fully local, deterministic, `numpy`-only. vecdiff never needs your original vect
 > The standard advice for re-embedding is "run the new index side by side (blue/green), compare, then cut over." Nobody ships the *compare* step — teams throw a few queries at both indexes and go by feel. vecdiff mechanizes that comparison.
 
 ```console
-$ uvx vecdiff old-snapshot/ new-snapshot/ --gate
+$ pip install vecdiff   # from a checkout; PyPI release planned
+$ vecdiff old-snapshot/ new-snapshot/ --gate
 ```
 
 ## Why
@@ -87,6 +88,8 @@ Exporting from your vector DB into `native` is ~10 lines: dump ids and float32 v
 ```
 
 vecdiff collects evidence for a human decision; the gate just makes "nobody looked" impossible.
+
+Exit codes: `0` all green, `1` any yellow, `2` any red — and `3` for hard errors (bad snapshot, dimension mismatch, I/O failure), distinct from gate verdicts so CI can tell "the comparison failed" from "the comparison said no".
 
 ## Method notes & honesty
 
