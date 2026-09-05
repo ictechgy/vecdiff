@@ -42,6 +42,13 @@ N2_NORM_CV_EPS = 1e-6        # norm std/mean below this = constant norms
 # --- N4 duplicates ----------------------------------------------------------
 N4_YELLOW = 0.01  # duplicate pairs / n: 0 -> green, < 1% -> yellow, >= 1% -> red
 
+# --- N5 constant vectors ------------------------------------------------------
+# Bit-identical float32 vectors across different chunk ids. Small groups are
+# re-chunking accidents (N4 territory); a large group means one embedding
+# was reused wholesale — cached/constant-vector pipeline bug semantics.
+N5_FLOOD_GROUP = 5        # bit-identical group >= this size -> yellow
+N5_FLOOD_FRACTION = 0.05  # largest group >= 5% of n -> red
+
 SEVERITY_ORDER = {"green": 0, "yellow": 1, "red": 2}
 N4_EXAMPLE_CAP = 1000  # stored examples cap (pair *count* is always exact)
 N1_HEAVY_EXAMPLE_CAP = 200  # heavy-loss ids stored in stats (count is exact)
@@ -589,5 +596,100 @@ def check_n4(
             ),
             details={k: stats[k] for k in ("pairs", "pair_ratio", "affected_ids")},
         )
+    )
+    return stats, findings
+
+
+# ---------------------------------------------------------------------------
+# N5 — constant vectors (pipeline-bug semantics)
+# ---------------------------------------------------------------------------
+
+
+def check_n5(
+    snap: Snapshot,
+    side: str,
+) -> tuple[dict, list[Finding]]:
+    """Bit-identical vectors reused across different chunk ids.
+
+    Complements N4: near-duplicate *content* (cosine >= threshold) usually
+    means a re-chunking accident, but one embedding reused wholesale —
+    a cached API response, a constant fallback vector, a broken batch —
+    is a pipeline bug and wants different remediation. Exact float32
+    equality via ``np.unique`` is O(n log n * d), no O(n^2) scan needed.
+    """
+    n = snap.n
+    stats: dict = {
+        "side": side,
+        "n": n,
+        "flood_group_min": N5_FLOOD_GROUP,
+        "flood_fraction": N5_FLOOD_FRACTION,
+        "groups": 0,
+        "ids_in_groups": 0,
+        "largest_group": 0,
+        "largest_group_fraction": 0.0,
+        "examples": [],
+    }
+    findings: list[Finding] = []
+    if n < 2:
+        findings.append(
+            Finding(
+                check="N5",
+                severity="green",
+                message=f"N5 skipped for {side}: needs >= 2 vectors (n={n})",
+                details=stats,
+            )
+        )
+        return stats, findings
+
+    _, inverse = np.unique(snap.vectors, axis=0, return_inverse=True)
+    counts = np.bincount(inverse.reshape(-1))
+    group_sizes = counts[counts >= 2]
+    stats["groups"] = int(len(group_sizes))
+    stats["ids_in_groups"] = int(group_sizes.sum()) if len(group_sizes) else 0
+    largest = int(group_sizes.max()) if len(group_sizes) else 0
+    stats["largest_group"] = largest
+    stats["largest_group_fraction"] = largest / n
+    if largest:
+        order = np.argsort(-counts)
+        shown = 0
+        for group_idx in order:
+            if counts[group_idx] < 2 or shown >= 5:
+                break
+            members = np.flatnonzero(inverse.reshape(-1) == group_idx)
+            stats["examples"].append(
+                {
+                    "size": int(counts[group_idx]),
+                    "ids": [snap.ids[i] for i in members[:5]],
+                }
+            )
+            shown += 1
+
+    frac = stats["largest_group_fraction"]
+    if largest == 0:
+        sev = "green"
+        message = (
+            f"{side}: no bit-identical vectors (constant-embedding check clean)"
+        )
+    else:
+        if frac >= N5_FLOOD_FRACTION:
+            sev = "red"
+        elif largest >= N5_FLOOD_GROUP:
+            sev = "yellow"
+        else:
+            sev = "green"
+        ex = stats["examples"][0]["ids"][:3] if stats["examples"] else []
+        message = (
+            f"{side}: {stats['groups']} bit-identical group(s), largest "
+            f"{largest} of {n} vectors ({frac:.1%}; thresholds: yellow >= "
+            f"{N5_FLOOD_GROUP} members, red >= {N5_FLOOD_FRACTION:.0%} of "
+            f"index)"
+            + (
+                f", e.g. ids {ex} — constant/cached embedding suspected"
+                if sev != "green"
+                else " — small groups are re-chunking duplicates (see N4)"
+            )
+        )
+    findings.append(
+        Finding(check="N5", severity=sev, message=message, details=stats)
     )
     return stats, findings

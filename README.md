@@ -44,6 +44,7 @@ You get console findings plus `report.md`, and `--gate` turns them into an exit 
 | **N1** | Neighbor stability | Model-swap / re-index regressions: per-chunk top-k neighbor sets compared across snapshots (Jaccard + rank inversions), heavy-loss chunks grouped by directory |
 | **N2** | Population stats | Pipeline breakage early warnings: norm distribution shift, extreme-norm outliers, dimension mismatch (hard error) |
 | **N4** | Duplicates | Re-chunking accidents and boilerplate floods: within-index pairs at cosine ≥ threshold |
+| **N5** | Constant vectors | Pipeline bugs (cached API response, constant fallback, broken batch): one bit-identical embedding reused across many chunk ids |
 
 Roadmap: **N3** orphan/ghost chunks audited against a symbol graph (iOS IndexStoreDB / Kotlin), canonical-query supervised comparison, time-series rot monitoring.
 
@@ -60,6 +61,7 @@ vecdiff reports graded signals, never a verdict like "model B is better". Thresh
 
 The N2 outlier check is skipped (reported green, with the reason inline) when norm variance is ≈ 0 — e.g. embedders that return pre-normalized unit vectors, where z-scores would be float rounding noise.
 | N4 duplicate pairs (cosine ≥ threshold) / n | 0 | < 1% | ≥ 1% |
+| N5 largest bit-identical group | < 5 members | ≥ 5 members | ≥ 5% of index |
 
 `--gate` exit codes: `0` all green, `1` any yellow, `2` any red. (Note: argparse usage errors — a mistyped flag — also exit 2; check stderr to tell them apart from a red verdict. Hard errors — unreadable snapshot, dimension mismatch — exit 3.)
 

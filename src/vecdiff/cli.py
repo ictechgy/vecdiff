@@ -112,8 +112,13 @@ def main(argv: list[str] | None = None) -> int:
         n4_b_stats, n4_b_findings = checks.check_n4(
             snap_b, "B", threshold=args.dup_threshold
         )
+        n5_a_stats, n5_a_findings = checks.check_n5(snap_a, "A")
+        n5_b_stats, n5_b_findings = checks.check_n5(snap_b, "B")
 
-        findings = n1_findings + n2_findings + n4_a_findings + n4_b_findings
+        findings = (
+            n1_findings + n2_findings + n4_a_findings + n4_b_findings
+            + n5_a_findings + n5_b_findings
+        )
 
         notes: list[str] = []
         if not args.full and n1_stats.get("mode") == "sampled":
@@ -149,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             n1_stats=n1_stats,
             n2_stats=n2_stats,
             n4_stats={"A": n4_a_stats, "B": n4_b_stats},
+            n5_stats={"A": n5_a_stats, "B": n5_b_stats},
             findings=findings,
             notes=notes,
             gate=args.gate,

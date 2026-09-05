@@ -331,3 +331,62 @@ def test_unit_vectors_cached_and_unit_norm():
     u2 = snap.unit_vectors()
     assert u1 is u2  # cached: N1 + N4 share one normalized copy
     np.testing.assert_allclose(np.linalg.norm(u1, axis=1), 1.0, rtol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# N5 constant vectors
+# ---------------------------------------------------------------------------
+
+
+def test_n5_clean_green():
+    ids = make_ids(50)
+    stats, findings = checks.check_n5(make_snapshot(ids, _base(50, 16)), "A")
+    assert stats["groups"] == 0
+    assert findings[0].severity == "green"
+
+
+def test_n5_small_group_is_n4_territory_green():
+    ids = make_ids(60)
+    v = _base(60, 16)
+    v[5] = v[4]  # one re-chunking duplicate pair (group size 2 < flood 5)
+    stats, findings = checks.check_n5(make_snapshot(ids, v), "A")
+    assert stats["groups"] == 1
+    assert stats["largest_group"] == 2
+    assert findings[0].severity == "green"
+    assert "see N4" in findings[0].message
+
+
+def test_n5_flood_group_yellow():
+    # group of 5 in n=120: >= N5_FLOOD_GROUP (5) but 4.17% < N5_FLOOD_FRACTION
+    ids = make_ids(120)
+    v = _base(120, 16)
+    v[10:15] = np.ones(16, np.float32)  # group of exactly 5 (a fresh
+    # constant vector, not a copy of an existing row — copying v[0] would
+    # pull the source row into the group and make it 6)
+    stats, findings = checks.check_n5(make_snapshot(ids, v), "A")
+    assert stats["largest_group"] == 5
+    assert findings[0].severity == "yellow"
+    assert "constant/cached embedding suspected" in findings[0].message
+
+
+def test_n5_constant_vector_flood_red():
+    ids = make_ids(100)
+    v = _base(100, 16)
+    v[50:] = v[0]  # one embedding reused for 51 ids -> pipeline bug
+    stats, findings = checks.check_n5(make_snapshot(ids, v), "A")
+    assert stats["groups"] == 1
+    assert stats["largest_group"] == 51
+    assert stats["largest_group_fraction"] == 0.51
+    assert findings[0].severity == "red"
+    assert stats["examples"][0]["size"] == 51
+
+
+def test_n5_near_duplicate_not_bit_identical():
+    # parallel but different magnitude: cosine 1.0, NOT bit-identical —
+    # N5 must stay quiet (that pair belongs to N4)
+    ids = make_ids(40)
+    v = _base(40, 16)
+    v[7] = v[3] * np.float32(3.0)
+    stats, findings = checks.check_n5(make_snapshot(ids, v), "A")
+    assert stats["groups"] == 0
+    assert findings[0].severity == "green"

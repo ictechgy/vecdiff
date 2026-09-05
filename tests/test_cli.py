@@ -157,3 +157,23 @@ def test_cli_heavy_loss_truncation_renders(tmp_path, capsys):
     assert code == 2
     out = capsys.readouterr().out
     assert "heavy-loss ids (Jaccard <= 0.30): 230 (100.0% of queried)" in out
+
+
+def test_cli_n5_constant_vector_flagged(tmp_path, capsys):
+    rng = np.random.default_rng(41)
+    ids = make_ids(120)
+    v = rng.standard_normal((120, 12)).astype(np.float32)
+    w = v.copy()
+    w[60:] = v[0]  # cached/constant embedding reused for 60 ids
+    a = write_dir(tmp_path / "a", ids, v)
+    b = write_dir(tmp_path / "b", ids, w)
+    jp = tmp_path / "r.json"
+    code = main([str(a), str(b), "--full", "--gate", "--json", str(jp)])
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "N5 constant vectors" in out
+    rep = json.loads(jp.read_text())
+    n5 = rep["checks"]["N5"]["B"]
+    assert n5["largest_group"] == 61  # v[0] plus the 60 copies
+    n5_findings = [f for f in rep["findings"] if f["check"] == "N5"]
+    assert any(f["severity"] == "red" for f in n5_findings)

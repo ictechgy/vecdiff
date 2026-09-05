@@ -23,6 +23,7 @@ def build_report(
     n1_stats: dict,
     n2_stats: dict,
     n4_stats: dict,
+    n5_stats: dict,
     findings: list[Finding],
     notes: list[str],
     gate: bool,
@@ -40,7 +41,7 @@ def build_report(
         "snapshots": {"a": snapshot_a_summary, "b": snapshot_b_summary},
         "params": {k: v for k, v in params.items() if k != "version"},
         "shared_ids": shared,
-        "checks": {"N1": n1_stats, "N2": n2_stats, "N4": n4_stats},
+        "checks": {"N1": n1_stats, "N2": n2_stats, "N4": n4_stats, "N5": n5_stats},
         "findings": [
             {
                 "check": f.check,
@@ -179,6 +180,17 @@ def render_console(rep: dict) -> str:
         )
 
     lines.append("")
+    n5a, n5b = rep["checks"]["N5"]["A"], rep["checks"]["N5"]["B"]
+    lines.append("N5 constant vectors (bit-identical reuse)")
+    for side_stats in (n5a, n5b):
+        lines.append(
+            f"  {side_stats['side']}: {side_stats['groups']} group(s), "
+            f"{side_stats['ids_in_groups']} ids, largest "
+            f"{side_stats['largest_group']} "
+            f"({side_stats['largest_group_fraction']:.1%} of {side_stats['n']})"
+        )
+
+    lines.append("")
     lines.append("Findings (graded signals; thresholds inline)")
     for f in rep["findings"]:
         lines.append(f"  {_TAG[f['severity']]} {f['check']}  {f['message']}")
@@ -311,6 +323,19 @@ def render_markdown(rep: dict) -> str:
         out.append(
             f"| {side_stats['side']} | {side_stats['pairs']} | "
             f"{side_stats.get('pair_ratio', 0):.2%} | {side_stats['affected_ids']} |"
+        )
+
+    out.append("")
+    n5a, n5b = rep["checks"]["N5"]["A"], rep["checks"]["N5"]["B"]
+    out.append("### N5 constant vectors (bit-identical reuse)")
+    out.append("")
+    out.append("| side | groups | ids in groups | largest group | largest / n |")
+    out.append("|---|---|---|---|---|")
+    for side_stats in (n5a, n5b):
+        out.append(
+            f"| {side_stats['side']} | {side_stats['groups']} | "
+            f"{side_stats['ids_in_groups']} | {side_stats['largest_group']} | "
+            f"{side_stats['largest_group_fraction']:.1%} |"
         )
 
     out.append("")

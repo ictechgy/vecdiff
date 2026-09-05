@@ -52,9 +52,14 @@ stripped from history with `git filter-repo` before going public, backup bundle 
       covers them today; only add a native-file adapter if users ask to diff the DB
       files directly without an export step (follow the sqlite adapter pattern — never
       build `file:` URIs by string concatenation; `as_uri()` regression test exists).
-- [ ] **N5 constant-vector check**: same-index pairs at cosine ≈ 1.0 between *different*
-      chunk ids is today folded into N4's report; consider splitting it out as its own
-      finding class (pipeline-bug semantics vs re-chunking-accident semantics).
+- [x] **N5 constant-vector check — done 2026-09-06.** `check_n5` flags
+      bit-identical vectors reused across chunk ids (np.unique, exact,
+      O(n log n·d) — no O(n²)); small groups defer to N4 (re-chunking
+      semantics), a group ≥ 5 members or ≥ 5% of the index escalates to
+      constant/cached-embedding suspicion (pipeline-bug semantics). Wired
+      into CLI + console/JSON/Markdown reports; README signal table in
+      lockstep. Note: N4 still counts bit-identical pairs in its cosine
+      threshold scan — N5 is the diagnostic lens on top, not a partition.
 - [ ] **Canonical-query supervised check**: optional query set (extracted from user query
       logs) compared across both indexes with rank-inversion report — complements the
       unsupervised N1.
@@ -68,10 +73,11 @@ stripped from history with `git filter-repo` before going public, backup bundle 
 
 ## 5. Known debts / honesty notes
 
-- [ ] The **FAISS adapter is import-guarded but untested against a real faiss install**
-      (faiss-cpu not present in the dev env). If you install faiss-cpu, add an integration
-      test (build a flat index, reconstruct, round-trip) marked `@pytest.mark.skipif` on
-      faiss availability.
+- [x] **FAISS integration test — done 2026-09-06.** `faiss-cpu` installed in
+      the dev venv; `tests/test_faiss_integration.py` (flat round trip, empty
+      index, non-finite rejection) runs when faiss is present, skips cleanly
+      in CI via importorskip. Version on main bumped to 0.3.0.dev0 after the
+      0.2.0 release; N5 ships in 0.3.0.
 - [ ] `check_n4` on very large indexes is exact O(n²·d) — README documents it; if a user
       reports 100k+ chunk pain, consider an optional ANN prefilter with an exactness note.
 - [ ] Docstring drift check: `tests/test_golden.py`-style staleness doesn't exist here, but
