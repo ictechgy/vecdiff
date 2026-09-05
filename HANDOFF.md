@@ -1,10 +1,8 @@
 # HANDOFF — what the next session should do
 
-State at writing: v0.2.0 (bumped for first release — jsonl/any-DB support +
-hardening since the 0.1.0 marker; 0.1.0 was never published), 11 commits,
-76/76 tests green, clean tree, **public at
-https://github.com/ictechgy/vecdiff (CI green on 3.10 + 3.13), not yet on
-PyPI**.
+State at writing: v0.2.0 **published on PyPI** (`pip install vecdiff`,
+release https://github.com/ictechgy/vecdiff/releases/tag/v0.2.0), 12 commits,
+76/76 tests green, clean tree, repo public with CI green on 3.10 + 3.13.
 Read `AGENTS.md` first (invariants, judgment discipline, test gotchas). (The original
 Korean planning doc lives outside the repo — local `기획서.md`, gitignored; it was
 stripped from history with `git filter-repo` before going public, backup bundle at
@@ -37,16 +35,13 @@ stripped from history with `git filter-repo` before going public, backup bundle 
       https://github.com/ictechgy/vecdiff; CI green on 3.10 + 3.13. The first
       real Linux run caught one latent test bug (float32/BLAS boundary assert —
       see the "exact float boundary" gotcha in AGENTS.md); fixed.
-- [ ] **PyPI publish — one release away (2026-09-06).** Pending publisher
-      (trusted publishing) configured on PyPI for owner=ictechgy repo=vecdiff
-      workflow=`pypi.yml`; the workflow (`.github/workflows/pypi.yml`) runs
-      tests → `uv build` → OIDC publish on every published GitHub release.
-      `uv build` verified locally (sdist + wheel, no stray files). To ship:
-      fill `[project.urls]` in pyproject.toml, then
-      `git tag v0.2.0 && git push origin v0.2.0 && gh release create v0.2.0`.
-      If the pending-publisher form had an environment name, uncomment
-      `environment:` in pypi.yml (must match exactly). Re-check the name is
-      still unclaimed right before the first release.
+- [x] **PyPI publish — done 2026-09-06.** Trusted publishing via
+      `.github/workflows/pypi.yml` (tests → `uv build` → OIDC, no tokens in
+      the repo). `vecdiff 0.2.0` is live: https://pypi.org/project/vecdiff/
+      (clean-venv install + `--version` verified). Future releases: bump
+      `__version__`, commit, `git tag vX.Y.Z && git push origin vX.Y.Z &&
+      gh release create vX.Y.Z`. If a future pending-publisher change adds
+      an environment name, uncomment `environment:` in pypi.yml to match.
 
 ## 3. v0.2 — adapter + supervised line
 

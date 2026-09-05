@@ -7,7 +7,7 @@ Fully local, deterministic, `numpy`-only. vecdiff never needs your original vect
 > The standard advice for re-embedding is "run the new index side by side (blue/green), compare, then cut over." Nobody ships the *compare* step — teams throw a few queries at both indexes and go by feel. vecdiff mechanizes that comparison.
 
 ```console
-$ pip install vecdiff   # from a checkout; PyPI release planned
+$ pip install vecdiff
 $ vecdiff old-snapshot/ new-snapshot/ --gate
 ```
 
