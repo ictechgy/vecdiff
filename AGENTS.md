@@ -10,13 +10,14 @@ vs Vectory / Ragas / MTEB.
 
 ```
 src/vecdiff/
-  snapshot.py  Snapshot dataclass + adapters (native dir/npz, sqlite, faiss-optional) + strict validation
+  snapshot.py  Snapshot dataclass + adapters (native dir/npz, jsonl universal, sqlite, faiss-optional) + strict validation; snapshot_from_arrays() builds in-memory Snapshots (the any-vector-DB programmatic path)
   knn.py       exact brute-force cosine top-k in memory-bounded blocks; l2_normalize
   checks.py    N1/N2/N4 — thresholds are module constants; Finding dataclass; gate semantics
   report.py    console / JSON / Markdown rendering of the plain-dict report
   cli.py       argparse; arg validation; error → exit 3, gate verdicts → exit 0/1/2
   errors.py    VecdiffError hierarchy (SnapshotError, DimensionMismatchError)
 scripts/make_demo_snapshots.py  deterministic 300×32 pair with planted defects (quickstart)
+docs/export_recipes.md  per-DB dump snippets (Qdrant/Chroma/LanceDB/pgvector) → jsonl/native; runs in the user's env, never adds vecdiff deps
 tests/        pytest on synthetic deterministic data; conftest.make_snapshot builds in-memory Snapshots
 ```
 
@@ -49,9 +50,19 @@ vecdiff /tmp/vecdemo/snapA /tmp/vecdemo/snapB --full --json r.json --markdown r.
   little-endian; the loader builds its URI via `Path.as_uri() + "?mode=ro"` — never
   concatenate raw paths into `file:` URIs (a `?` or `#` in the path silently opens an
   empty database; regression-tested).
+- **jsonl adapter** is the universal any-vector-DB path (stdlib `json`/`gzip` only):
+  one `{"id", "vector", "path"?}` object per line; sidecar meta is
+  `<stem-without-.jsonl/.ndjson/.gz>.meta.json` — `snap.jsonl`, `snap.ndjson` and
+  `snap.jsonl.gz` all resolve to `snap.meta.json` (tested contract, keep it).
+  Rows convert to float32 in `JSONL_CHUNK_ROWS`-sized chunks — never accumulate the
+  whole file as Python floats (a 1M×768 dump would hold ~20 GB of intermediates).
+  Export snippets for specific DBs live in `docs/export_recipes.md` and run in the
+  user's environment — never add a DB client as a vecdiff dependency.
 - **Snapshot validation** rejects duplicate ids, dim mismatches (`dim > 0`, vectors width
-  == dim), length mismatches; float64 inputs are cast with a note; empty snapshots are
-  valid. `np.load` must always run with `allow_pickle=False`.
+  == dim), length mismatches, and non-finite (NaN/inf) values — NaN makes cosine top-k
+  silently arbitrary, so every adapter must call `_require_finite` before building a
+  Snapshot; float64 inputs are cast with a note; empty snapshots are valid.
+  `np.load` must always run with `allow_pickle=False`.
 - **Exit codes**: 0 all-green / 1 yellow / 2 red are gate verdicts; 3 is a hard error
   (bad snapshot, dimension mismatch, I/O). Keep them disjoint — CI needs to distinguish
   "comparison failed" from "comparison said no".

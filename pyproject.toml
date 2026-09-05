@@ -39,6 +39,12 @@ classifiers = [
 ]
 dependencies = ["numpy>=1.24"]
 
+# Fill in before the PyPI publish (HANDOFF item 2) — repo URL is unknown until
+# the GitHub repository exists.
+# [project.urls]
+# Homepage = "https://github.com/<user>/vecdiff"
+# Repository = "https://github.com/<user>/vecdiff"
+
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.7"]
 dev = ["pytest>=7.0"]

@@ -12,7 +12,8 @@ Read `AGENTS.md` first (invariants, judgment discipline, test gotchas), `기획�
 - [ ] That report becomes the README/launch case study ("N1 flagged X chunks concentrated
       in src/auth; N4 caught Y re-chunking duplicates") — the 기획서 first-publication
       strategy explicitly calls for one real case, and the re-embedding guide blogs
-      (no diff tool exists) are the natural citation path.
+      (no diff tool exists) are the natural citation path. **Scrub filesystem paths from
+      the report before publishing** (reports embed absolute paths).
 
 ## 2. Ship it
 
@@ -23,9 +24,13 @@ Read `AGENTS.md` first (invariants, judgment discipline, test gotchas), `기획�
 
 ## 3. v0.2 — adapter + supervised line (from 기획서)
 
-- [ ] **LanceDB / Qdrant (local) snapshot adapters** — the two most likely real-world
-      sources; follow the sqlite adapter pattern (never build `file:` URIs by string
-      concatenation — `as_uri()` regression test exists).
+- [x] **Any-vector-DB support shipped (v0.1.x)**: jsonl adapter (stdlib, gz-capable,
+      path-aware) + `snapshot_from_arrays()` in-memory API + `docs/export_recipes.md`
+      (Qdrant/Chroma/LanceDB/pgvector snippets). LanceDB/Qdrant *native-file* adapters
+      remain open below but are no longer the only path — the universal escape hatch
+      covers them today; only add a native-file adapter if users ask to diff the DB
+      files directly without an export step (follow the sqlite adapter pattern — never
+      build `file:` URIs by string concatenation; `as_uri()` regression test exists).
 - [ ] **N5 constant-vector check**: same-index pairs at cosine ≈ 1.0 between *different*
       chunk ids is today folded into N4's report; consider splitting it out as its own
       finding class (pipeline-bug semantics vs re-chunking-accident semantics).

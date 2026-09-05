@@ -5,9 +5,11 @@ multiplications. The per-block score matrix is capped at ~64 MB regardless
 of index size, so a 100k x 1024 snapshot never allocates a 100k x 100k
 matrix. Time is O(queries * n * dim) — exact, not ANN.
 
-Determinism: fixed block sizes, deterministic argpartition + stable sort
-for top-k tie-breaking. Same inputs + same seed -> same output on the
-same machine.
+Determinism: fixed block sizes; ties among the *selected* top-k
+candidates are broken by a stable sort (lower index first). Which of
+several exactly-tied values at the k-th boundary gets selected is not
+guaranteed — same inputs on the same numpy build give the same output,
+but boundary ties may resolve differently across numpy versions.
 """
 
 from __future__ import annotations
@@ -48,9 +50,10 @@ def topk_cosine(
     skip a redundant full-array normalization.
 
     Returns ``(neighbor_indices (q, k_eff) int64, similarities (q, k_eff)
-    float32)`` sorted by similarity descending (ties broken by stable sort,
-    i.e. lower index first). ``k_eff = min(k, n - 1)``; if ``n <= 1`` the
-    arrays have zero columns.
+    float32)`` sorted by similarity descending. Ties within the selected
+    k are broken stably (lower index first); which exactly-tied value at
+    the k-th boundary is kept is not guaranteed. ``k_eff = min(k, n - 1)``;
+    if ``n <= 1`` the arrays have zero columns.
     """
     v = unit if unit is not None else l2_normalize(vectors)
     n = v.shape[0]

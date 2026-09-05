@@ -124,7 +124,8 @@ def render_console(rep: dict) -> str:
             f"{inv['ids_with_inversion_ge_5_fraction']:.1%}"
         )
         lines.append(
-            f"  heavy-loss ids (Jaccard <= 0.30): {len(n1['heavy_loss_ids'])} "
+            f"  heavy-loss ids (Jaccard <= 0.30): "
+            f"{n1.get('heavy_loss_count', len(n1['heavy_loss_ids']))} "
             f"({n1['heavy_loss_fraction']:.1%} of queried)"
         )
     else:
@@ -265,9 +266,10 @@ def render_markdown(rep: dict) -> str:
             f"{inv['max_abs_delta']}, ids with inversion >= 5: "
             f"{inv['ids_with_inversion_ge_5_fraction']:.1%}"
         )
-        if n1["heavy_loss_ids"]:
+        heavy_count = n1.get("heavy_loss_count", len(n1["heavy_loss_ids"]))
+        if heavy_count:
             out.append(
-                f"- heavy-loss ids (Jaccard <= 0.30): {len(n1['heavy_loss_ids'])} "
+                f"- heavy-loss ids (Jaccard <= 0.30): {heavy_count} "
                 f"({n1['heavy_loss_fraction']:.1%})"
             )
             conc = n1.get("heavy_loss_concentration", {})

@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from vecdiff import __version__
 from vecdiff.cli import main
 
 from conftest import make_ids, write_dir
@@ -116,4 +117,43 @@ def test_cli_version_subprocess():
         capture_output=True, text=True, env=env,
     )
     assert proc.returncode == 0
-    assert proc.stdout.strip() == "vecdiff 0.1.0"
+    assert proc.stdout.strip() == f"vecdiff {__version__}"
+
+
+def test_cli_explicit_jsonl_format(tmp_path):
+    rng = np.random.default_rng(21)
+    ids = make_ids(40)
+    v = rng.standard_normal((40, 8)).astype(np.float32)
+    paths = []
+    for tag in ("a", "b"):
+        f = tmp_path / f"{tag}.dat"  # unknown extension -> needs --format
+        with open(f, "w", encoding="utf-8") as fh:
+            for i in range(40):
+                fh.write(
+                    json.dumps(
+                        {
+                            "id": ids[i],
+                            "vector": v[i].tolist(),
+                            **({"path": f"src/x/{i}.py"} if tag == "a" else {}),
+                        }
+                    )
+                    + "\n"
+                )
+        paths.append(f)
+    code = main([str(paths[0]), str(paths[1]), "--format", "jsonl", "--full"])
+    assert code == 0
+
+
+def test_cli_heavy_loss_truncation_renders(tmp_path, capsys):
+    # 230 independent snapshots -> every shared id heavy-loss (> cap 200);
+    # console must render the exact count, not the capped list length
+    rng = np.random.default_rng(31)
+    ids = make_ids(230)
+    a = write_dir(tmp_path / "a", ids, rng.standard_normal((230, 8)).astype(np.float32))
+    b = write_dir(
+        tmp_path / "b", ids, rng.standard_normal((230, 8)).astype(np.float32)
+    )
+    code = main([str(a), str(b), "--full", "--gate"])
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "heavy-loss ids (Jaccard <= 0.30): 230 (100.0% of queried)" in out

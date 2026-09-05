@@ -263,6 +263,20 @@ def test_n4_small_snapshot_yellow_only():
     assert findings[0].severity == "yellow"
 
 
+def test_n4_duplicate_explosion_counts_exact_and_caps_examples():
+    # every vector identical -> n(n-1)/2 pairs; the Python-level example
+    # loop must not scale with the pair count
+    n = 60
+    ids = make_ids(n)
+    v = np.tile(_base(1, 16), (n, 1)).astype(np.float32)
+    stats, findings = checks.check_n4(make_snapshot(ids, v), "B")
+    assert stats["pairs"] == n * (n - 1) // 2
+    assert stats["affected_ids"] == n
+    assert stats["examples_truncated"] is True
+    assert len(stats["examples"]) == 10  # display slice of the capped list
+    assert findings[0].severity == "red"
+
+
 def test_gate_exit_codes():
     from vecdiff.checks import Finding
 
@@ -273,6 +287,26 @@ def test_gate_exit_codes():
     assert checks.gate_exit_code([Finding("N4", "yellow", "y"),
                                   Finding("N1", "red", "z")]) == 2
     assert checks.worst_severity([Finding("N4", "yellow", "y")]) == "yellow"
+
+
+def test_n1_k_must_be_positive():
+    a = make_snapshot(make_ids(10), _base(10, 8))
+    with pytest.raises(ValueError, match="k must be >= 1"):
+        checks.check_n1(a, a, k=0)
+
+
+def test_n1_heavy_loss_ids_capped_count_exact():
+    # fully independent embedding spaces: every shared id is heavy-loss
+    n = 250
+    ids = make_ids(n)
+    a = make_snapshot(ids, _base(n, 16, seed=1))
+    b = make_snapshot(ids, _base(n, 16, seed=2))
+    stats, findings = checks.check_n1(a, b, full=True)
+    assert stats["heavy_loss_count"] == n
+    assert len(stats["heavy_loss_ids"]) == checks.N1_HEAVY_EXAMPLE_CAP
+    assert stats["heavy_loss_ids_truncated"] is True
+    assert stats["heavy_loss_ids"] == stats["heavy_loss_ids"][: checks.N1_HEAVY_EXAMPLE_CAP]
+    assert checks.worst_severity(findings) == "red"
 
 
 def test_unit_vectors_cached_and_unit_norm():

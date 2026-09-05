@@ -59,7 +59,7 @@ vecdiff reports graded signals, never a verdict like "model B is better". Thresh
 | N2 extreme-norm outliers (\|z\| > 3) | ≤ 1% | < 5% | ≥ 5% |
 | N4 duplicate pairs (cosine ≥ threshold) / n | 0 | < 1% | ≥ 1% |
 
-`--gate` exit codes: `0` all green, `1` any yellow, `2` any red.
+`--gate` exit codes: `0` all green, `1` any yellow, `2` any red. (Note: argparse usage errors — a mistyped flag — also exit 2; check stderr to tell them apart from a red verdict. Hard errors — unreadable snapshot, dimension mismatch — exit 3.)
 
 ### Sampling
 
@@ -67,17 +67,18 @@ N1 is exact per queried chunk but samples shared ids by default (`--sample 0.2`,
 
 ## Snapshot formats
 
-A *snapshot* is a model-agnostic dump: chunk ids + float32 vectors + metadata (`model`, `dim`, `chunk_paths`, `created_at`).
+A *snapshot* is a model-agnostic dump: chunk ids + float32 vectors + metadata (`model`, `dim`, `chunk_paths`, `created_at`). Loading validates the dump strictly and rejects duplicate ids, dimension/length mismatches, and non-finite (NaN/inf) vectors — a poisoned row would make cosine top-k silently arbitrary, so it fails at load instead of mid-report.
 
 | Adapter | Input | Notes |
 |---|---|---|
 | `native` (built-in) | directory with `vectors.npy` + `meta.json`, or a single self-describing `.npz` | the interchange format — export once, diff forever |
+| `jsonl` (built-in) | `.jsonl` / `.ndjson` (optionally `.gz`): `{"id", "vector", "path"?}` per line; optional `<stem>.meta.json` sidecar | the universal escape hatch — any vector DB can dump this in a few lines of client code |
 | `sqlite` (built-in) | `chunks(id TEXT PRIMARY KEY, vec BLOB)` float32 little-endian; optional `meta(key, value)` table | stdlib only |
 | `faiss` (optional) | `.index` / `.faiss` | requires `pip install faiss-cpu`; only flat-style indexes whose vectors can be reconstructed |
 
 Format is auto-detected from the path; override with `--format`.
 
-Exporting from your vector DB into `native` is ~10 lines: dump ids and float32 vectors, write `meta.json`. (Per-DB export helpers are on the roadmap.)
+**Any other vector DB** (Qdrant, Chroma, LanceDB, pgvector, …): dump a JSONL snapshot with your DB's own client, or build one in memory with `snapshot_from_arrays(ids=..., vectors=..., model=...)` — vecdiff stays numpy-only and never talks to your database. Ready-to-run snippets live in [docs/export_recipes.md](docs/export_recipes.md). One rule above all: ids must be stable across the two snapshots (N1 pairs chunks by id), so never export row numbers.
 
 ## CI migration gate
 

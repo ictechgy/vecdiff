@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
             "claims one index or model is better."
         ),
     )
-    p.add_argument("snapshot_a", help="snapshot A (blue / before): dir, .npz, .db/.sqlite, or .index")
+    p.add_argument("snapshot_a", help="snapshot A (blue / before): dir, .npz, .jsonl(.gz), .db/.sqlite, or .index")
     p.add_argument("snapshot_b", help="snapshot B (green / after)")
     p.add_argument(
         "--k",
@@ -65,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--format",
-        choices=("auto", "native", "sqlite", "faiss"),
+        choices=("auto", "native", "jsonl", "sqlite", "faiss"),
         default="auto",
         help="input format for both snapshots (default: auto-detected)",
     )

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .errors import DimensionMismatchError
-from .knn import topk_cosine
+from .knn import block_rows, topk_cosine
 from .snapshot import Snapshot, dir_of
 
 # --- N1 neighbor stability -------------------------------------------------
@@ -41,6 +41,7 @@ N4_YELLOW = 0.01  # duplicate pairs / n: 0 -> green, < 1% -> yellow, >= 1% -> re
 
 SEVERITY_ORDER = {"green": 0, "yellow": 1, "red": 2}
 N4_EXAMPLE_CAP = 1000  # stored examples cap (pair *count* is always exact)
+N1_HEAVY_EXAMPLE_CAP = 200  # heavy-loss ids stored in stats (count is exact)
 
 
 @dataclass
@@ -101,6 +102,8 @@ def check_n1(
     index) and score the neighbor-set Jaccard. Also reports rank-inversion
     stats over neighbors present in both lists.
     """
+    if int(k) < 1:
+        raise ValueError(f"k must be >= 1, got {k}")
     stats: dict = {
         "k_requested": int(k),
         "sample_fraction": None if full else float(sample),
@@ -187,7 +190,9 @@ def check_n1(
             "mean_jaccard": mean_j,
             "jaccard_percentiles": _percentiles(jaccards),
             "degraded_ids_jaccard_lt_0.5": degraded,
-            "heavy_loss_ids": heavy,
+            "heavy_loss_count": len(heavy),
+            "heavy_loss_ids": heavy[:N1_HEAVY_EXAMPLE_CAP],
+            "heavy_loss_ids_truncated": len(heavy) > N1_HEAVY_EXAMPLE_CAP,
             "heavy_loss_fraction": heavy_frac,
             "rank_inversion": {
                 "mean_abs_delta": float(np.mean(inversion_abs)) if inversion_abs else 0.0,
@@ -200,7 +205,9 @@ def check_n1(
     )
 
     # concentration of heavy-loss ids by directory
-    stats["heavy_loss_concentration"] = _concentration(heavy, snap_a, snap_b)
+    stats["heavy_loss_concentration"] = _concentration(
+        heavy, snap_a, snap_b, index_a, index_b
+    )
 
     if mean_j >= N1_MEAN_GREEN:
         sev = "green"
@@ -252,13 +259,17 @@ def check_n1(
     return stats, findings
 
 
-def _concentration(heavy_ids: list[str], snap_a: Snapshot, snap_b: Snapshot) -> dict:
+def _concentration(
+    heavy_ids: list[str],
+    snap_a: Snapshot,
+    snap_b: Snapshot,
+    index_a: dict[str, int],
+    index_b: dict[str, int],
+) -> dict:
     """Group heavy-loss ids by directory of their chunk path (side A paths
     preferred, side B as fallback)."""
     counts: dict[str, int] = {}
     paths_known = snap_a.paths is not None or snap_b.paths is not None
-    index_a = snap_a.index_of()
-    index_b = snap_b.index_of()
     for cid in heavy_ids:
         path = None
         if snap_a.paths is not None and cid in index_a:
@@ -481,26 +492,36 @@ def check_n4(
         return stats, findings
 
     v = snap.unit_vectors()
-    from .knn import block_rows  # local import to avoid cycle noise
+    ids_arr = np.asarray(snap.ids)
 
     pair_count = 0
+    examples_seen = 0
     affected: set[str] = set()
     examples: list[dict] = []
-    truncated = False
     step = block_rows(n)
     for start in range(0, n, step):
         end = min(n, start + step)
         sims = v[start:end] @ v.T  # (b, n)
         upper = np.arange(n)[None, :] > np.arange(start, end)[:, None]
         hits = (sims >= threshold) & upper
-        pair_count += int(np.count_nonzero(hits))
+        count = int(np.count_nonzero(hits))
+        if not count:
+            continue
+        pair_count += count
+        examples_seen += count
         coords = np.argwhere(hits)
-        for local_i, j in coords:
-            i = start + int(local_i)
-            j = int(j)
-            affected.add(snap.ids[i])
-            affected.add(snap.ids[j])
-            if len(examples) < N4_EXAMPLE_CAP:
+        # vectorized affected-id collection: a duplicate explosion is n^2/2
+        # pairs, and a Python-level loop over it would dominate the run
+        hit_rows = coords[:, 0] + start
+        hit_cols = coords[:, 1]
+        affected.update(
+            np.unique(np.concatenate((ids_arr[hit_rows], ids_arr[hit_cols]))).tolist()
+        )
+        room = N4_EXAMPLE_CAP - len(examples)
+        if room > 0:
+            for local_i, j in coords[:room]:
+                i = start + int(local_i)
+                j = int(j)
                 examples.append(
                     {
                         "id_a": snap.ids[i],
@@ -510,8 +531,7 @@ def check_n4(
                         "path_b": (snap.paths[j] if snap.paths else None),
                     }
                 )
-            else:
-                truncated = True
+    truncated = examples_seen > len(examples)
 
     examples.sort(key=lambda ex: (-ex["cosine"], ex["id_a"], ex["id_b"]))
     ratio = pair_count / n

@@ -19,6 +19,14 @@ sqlite  (required, stdlib only)
     An optional ``meta(key TEXT, value TEXT)`` table may provide ``model``
     and ``created_at``.
 
+jsonl  (required, stdlib only — the universal escape hatch)
+  * ``.jsonl`` / ``.ndjson`` (optionally ``.gz``): one JSON object per line
+    with keys ``id`` (string), ``vector`` (list of floats) and optionally
+    ``path`` (chunk file path). A sidecar ``meta.json`` next to the file may
+    supply ``model`` / ``created_at``; without it they are reported as
+    unknown. Any vector DB can produce this with a few lines of its own
+    client code — see ``docs/export_recipes.md``.
+
 faiss  (optional, import-guarded)
   * a FAISS index file (``.index`` / ``.faiss``). If the ``faiss`` package
     is not installed the adapter fails with a clear, actionable error
@@ -47,6 +55,8 @@ NATIVE_VEC_NAMES = ("vectors.npy", "vectors.npz")
 SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
 FAISS_SUFFIXES = {".index", ".faiss"}
 NATIVE_SUFFIXES = {".npz", ".npy"}
+JSONL_SUFFIXES = {".jsonl", ".ndjson"}
+JSONL_CHUNK_ROWS = 8192  # rows buffered as Python floats before float32 conversion
 
 
 @dataclass
@@ -60,7 +70,7 @@ class Snapshot:
     paths: list[str] | None  # chunk file paths, aligned with ids; None if unknown
     created_at: str | None
     source: str  # filesystem path this was loaded from
-    adapter: str  # "native" | "sqlite" | "faiss"
+    adapter: str  # "native" | "jsonl" | "sqlite" | "faiss" | "memory"
     notes: list[str] = field(default_factory=list)  # honest provenance notes
     _unit: np.ndarray | None = field(default=None, repr=False, compare=False)
 
@@ -104,8 +114,8 @@ class Snapshot:
 def load_snapshot(path: str | Path, fmt: str = "auto") -> Snapshot:
     """Load a snapshot from ``path``.
 
-    ``fmt`` is one of ``auto`` (infer from path), ``native``, ``sqlite`` or
-    ``faiss``.
+    ``fmt`` is one of ``auto`` (infer from path), ``native``, ``jsonl``,
+    ``sqlite`` or ``faiss``.
     """
     p = Path(path)
     if not p.exists():
@@ -114,12 +124,14 @@ def load_snapshot(path: str | Path, fmt: str = "auto") -> Snapshot:
     chosen = fmt if fmt != "auto" else detect_format(p)
     if chosen == "native":
         return _load_native(p)
+    if chosen == "jsonl":
+        return _load_jsonl(p)
     if chosen == "sqlite":
         return _load_sqlite(p)
     if chosen == "faiss":
         return _load_faiss(p)
     raise SnapshotError(
-        f"unknown input format {fmt!r} (expected auto|native|sqlite|faiss)"
+        f"unknown input format {fmt!r} (expected auto|native|jsonl|sqlite|faiss)"
     )
 
 
@@ -127,15 +139,22 @@ def detect_format(p: Path) -> str:
     if p.is_dir():
         return "native"
     suffix = p.suffix.lower()
+    if p.name.lower().endswith(".gz"):
+        stem = p.name.lower()[: -len(".gz")]
+        if any(stem.endswith(s) for s in JSONL_SUFFIXES):
+            return "jsonl"
     if suffix in NATIVE_SUFFIXES:
         return "native"
+    if suffix in JSONL_SUFFIXES:
+        return "jsonl"
     if suffix in SQLITE_SUFFIXES:
         return "sqlite"
     if suffix in FAISS_SUFFIXES:
         return "faiss"
     raise SnapshotError(
         f"cannot infer snapshot format for '{p}': unknown extension "
-        f"'{suffix}'. Supported: native directory or .npz, SQLite "
+        f"'{suffix}'. Supported: native directory or .npz, JSONL "
+        f"({', '.join(sorted(JSONL_SUFFIXES))}, optionally .gz), SQLite "
         f"({', '.join(sorted(SQLITE_SUFFIXES))}), FAISS "
         f"({', '.join(sorted(FAISS_SUFFIXES))}). Pass --format to override."
     )
@@ -175,6 +194,40 @@ def write_native_snapshot(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return out
+
+
+def snapshot_from_arrays(
+    *,
+    ids: list[str],
+    vectors: np.ndarray,
+    model: str,
+    chunk_paths: list[str] | None = None,
+    created_at: str | None = None,
+    source: str = "<in-memory>",
+) -> Snapshot:
+    """Build a validated Snapshot directly from arrays, in memory.
+
+    The programmatic entry point for "any vector DB": pull ids + vectors
+    out of your database with its own client library and hand them to
+    vecdiff without touching the filesystem. Validation is identical to
+    the file adapters, so a bad build fails here, not mid-diff.
+    """
+    arrays = np.asarray(vectors)
+    if arrays.ndim != 2:
+        raise SnapshotError(
+            f"vectors must be a 2-D (n, dim) array, got shape {arrays.shape}; "
+            "pass e.g. np.zeros((0, dim)) for an empty snapshot"
+        )
+    meta: dict = {
+        "ids": list(ids),
+        "model": str(model),
+        "dim": int(arrays.shape[1]),
+    }
+    if chunk_paths is not None:
+        meta["chunk_paths"] = [str(x) for x in chunk_paths]
+    if created_at is not None:
+        meta["created_at"] = str(created_at)
+    return _build_snapshot(meta, arrays, source=source, adapter="memory")
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +312,147 @@ def _read_json(meta_path: Path) -> dict:
     except (OSError, json.JSONDecodeError) as exc:
         raise SnapshotError(f"could not read metadata '{meta_path}': {exc}") from exc
     return meta
+
+
+# ---------------------------------------------------------------------------
+# jsonl adapter (stdlib only — universal interchange for any vector DB)
+# ---------------------------------------------------------------------------
+
+
+def _load_jsonl(p: Path) -> Snapshot:
+    """Load a JSONL snapshot: one ``{"id", "vector", "path"?}`` object per line.
+
+    gz-compressed files are transparently decompressed. A sidecar
+    ``meta.json`` (same stem, .json extension) may provide ``model`` /
+    ``created_at``; without it they are reported as unknown.
+
+    Memory: rows are converted to float32 in ``JSONL_CHUNK_ROWS``-sized
+    chunks, so the Python-float intermediate never exceeds one chunk; the
+    final concatenation transiently holds ~2x the float32 array.
+    """
+    if p.is_dir():
+        raise SnapshotError(f"jsonl snapshot must be a file, got directory: {p}")
+    import gzip
+
+    meta: dict = {}
+    # sidecar: strip .gz then .jsonl/.ndjson, append .meta.json
+    # (snap.jsonl / snap.ndjson / snap.jsonl.gz all look for snap.meta.json)
+    stem = p.name
+    if stem.lower().endswith(".gz"):
+        stem = stem[: -len(".gz")]
+    stem = stem[: stem.rfind(".")] if "." in stem else stem
+    sidecar = p.with_name(stem + ".meta.json")
+    if sidecar.is_file():
+        meta = _read_json(sidecar)
+        if not isinstance(meta, dict):
+            raise SnapshotError(f"sidecar metadata must be a JSON object ({sidecar})")
+
+    ids: list[str] = []
+    paths: list[str] = []
+    chunks: list[np.ndarray] = []
+    buf: list[list[float]] = []
+    dim = 0
+    opener = gzip.open if p.name.lower().endswith(".gz") else open
+    try:
+        with opener(p, "rt", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} is not valid JSON: {exc}"
+                    ) from exc
+                if not isinstance(obj, dict):
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} must be a JSON object, "
+                        f"got {type(obj).__name__}"
+                    )
+                missing = [key for key in ("id", "vector") if key not in obj]
+                if missing:
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} is missing key(s) "
+                        f"{missing}; expected id, vector (and optionally path)"
+                    )
+                if not isinstance(obj["id"], str):
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'id' must be a string, "
+                        f"got {type(obj['id']).__name__}"
+                    )
+                vec = obj["vector"]
+                if not isinstance(vec, list) or not all(
+                    isinstance(x, (int, float)) and not isinstance(x, bool) for x in vec
+                ):
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'vector' must be a "
+                        "list of numbers"
+                    )
+                if not vec:
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'vector' is empty"
+                    )
+                path = obj.get("path")
+                if path is not None and not isinstance(path, str):
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'path' must be a string"
+                    )
+                row = [float(x) for x in vec]
+                if dim == 0:
+                    dim = len(row)
+                elif len(row) != dim:
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} has vector length "
+                        f"{len(row)}, expected {dim} (inconsistent vector lengths)"
+                    )
+                ids.append(obj["id"])
+                buf.append(row)
+                paths.append(path if path is not None else "")
+                if len(buf) >= JSONL_CHUNK_ROWS:
+                    chunks.append(np.asarray(buf, dtype=np.float32))
+                    buf.clear()
+    except SnapshotError:
+        raise
+    except (OSError, gzip.BadGzipFile, EOFError, UnicodeDecodeError) as exc:
+        raise SnapshotError(f"could not read jsonl snapshot '{p}': {exc}") from exc
+    if buf:
+        chunks.append(np.asarray(buf, dtype=np.float32))
+
+    notes = [
+        "jsonl adapter: model/created_at come from the optional sidecar "
+        "<name>.meta.json (defaults: model 'unknown')."
+    ]
+    if not ids:
+        notes.append("jsonl snapshot is empty (0 records).")
+        return Snapshot(
+            ids=[],
+            vectors=np.zeros((0, 0), dtype=np.float32),
+            model=str(meta.get("model", "unknown")),
+            dim=0,
+            paths=None,
+            created_at=str(meta["created_at"]) if meta.get("created_at") else None,
+            source=str(p),
+            adapter="jsonl",
+            notes=notes,
+        )
+    vectors = np.concatenate(chunks)
+    built_meta: dict = {"ids": ids, "model": str(meta.get("model", "unknown")), "dim": dim}
+    if created := meta.get("created_at"):
+        built_meta["created_at"] = str(created)
+    has_paths = any(x for x in paths)
+    if has_paths:
+        built_meta["chunk_paths"] = paths
+    else:
+        notes.append(
+            "jsonl adapter: no 'path' fields found; N1 path concentration "
+            "will be unavailable."
+        )
+    snap = _build_snapshot(
+        built_meta, vectors, source=str(p), adapter="jsonl"
+    )
+    snap.notes = notes + snap.notes
+    return snap
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +552,7 @@ def _load_sqlite(p: Path) -> Snapshot:
         ids.append(row_id)
         vecs.append(np.frombuffer(buf, dtype="<f4"))
     vectors = np.ascontiguousarray(np.stack(vecs).astype(np.float32, copy=False))
+    _require_finite(vectors, ids, str(p))
     if "meta" not in tables:
         notes.append("sqlite snapshot has no meta table; model reported as 'unknown'.")
     if "chunk_paths" not in meta:
@@ -400,6 +595,7 @@ def _load_faiss(p: Path) -> Snapshot:
     except Exception as exc:
         raise SnapshotError(f"could not read FAISS index '{p}': {exc}") from exc
     n, d = int(index.ntotal), int(index.d)
+    faiss_ids = [str(i) for i in range(n)]
     if n == 0:
         vectors = np.zeros((0, d), dtype=np.float32)
     else:
@@ -413,8 +609,9 @@ def _load_faiss(p: Path) -> Snapshot:
                 "(only flat-style indexes whose vectors can be reconstructed "
                 "can be loaded). Export to the native/sqlite format instead."
             ) from exc
+        _require_finite(vectors, faiss_ids, str(p))
     return Snapshot(
-        ids=[str(i) for i in range(n)],
+        ids=faiss_ids,
         vectors=vectors,
         model="unknown",
         dim=d,
@@ -432,6 +629,25 @@ def _load_faiss(p: Path) -> Snapshot:
 # ---------------------------------------------------------------------------
 # shared validation
 # ---------------------------------------------------------------------------
+
+
+def _require_finite(vectors: np.ndarray, ids: list[str], source: str) -> None:
+    """Reject NaN/inf embeddings.
+
+    NaN never compares equal, so cosine top-k over a poisoned row returns
+    an arbitrary neighbor set — the worst pipeline bug would render as a
+    clean report. Fail at load instead.
+    """
+    row_ok = np.isfinite(vectors).all(axis=1)
+    if not row_ok.all():
+        bad = np.flatnonzero(~row_ok)
+        shown = [ids[i] for i in bad[:5]]
+        raise SnapshotError(
+            f"{len(bad)} vector(s) contain non-finite (NaN/inf) values "
+            f"after float32 cast, first few ids: {shown} ({source}). Fix or "
+            "drop these rows in the export — their neighbor sets would be "
+            "arbitrary."
+        )
 
 
 def _build_snapshot(
@@ -492,6 +708,7 @@ def _build_snapshot(
             f"vectors stored as {vectors.dtype}, cast to float32 on load."
         )
     vectors = np.ascontiguousarray(vectors.astype(np.float32, copy=False))
+    _require_finite(vectors, list(ids), source)
 
     paths: list[str] | None = None
     raw_paths = meta.get("chunk_paths", meta.get("sources"))
