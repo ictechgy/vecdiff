@@ -188,6 +188,18 @@ def test_n2_outlier_flagged():
     assert any(f.severity == "red" for f in findings2)
 
 
+def test_n2_prenormalized_vectors_skip_outlier_check():
+    # embedders that return unit vectors make norm z-scores pure float
+    # noise (std ~1e-7 -> 1e-7 wobble becomes |z| > 3); must skip, not flag
+    ids = make_ids(100)
+    v = _base(100, 16)
+    u = (v / np.linalg.norm(v, axis=1, keepdims=True)).astype(np.float32)
+    stats, findings = checks.check_n2(make_snapshot(ids, u), make_snapshot(ids, u))
+    assert stats["a"]["outliers"]["count"] == 0
+    assert "skipped_reason" in stats["a"]["outliers"]
+    assert checks.worst_severity(findings) == "green"
+
+
 def test_n2_norm_shift_graded():
     ids = make_ids(80)
     v = _base(80, 16)

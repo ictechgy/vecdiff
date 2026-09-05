@@ -57,6 +57,8 @@ vecdiff reports graded signals, never a verdict like "model B is better". Thresh
 | N1 heavy-loss chunks (Jaccard ≤ 0.30, i.e. ≥ 70% of top-k lost) | < 2% of sampled | < 10% | ≥ 10% |
 | N2 norm mean shift A→B | ≤ 5% | ≤ 20% | > 20% |
 | N2 extreme-norm outliers (\|z\| > 3) | ≤ 1% | < 5% | ≥ 5% |
+
+The N2 outlier check is skipped (reported green, with the reason inline) when norm variance is ≈ 0 — e.g. embedders that return pre-normalized unit vectors, where z-scores would be float rounding noise.
 | N4 duplicate pairs (cosine ≥ threshold) / n | 0 | < 1% | ≥ 1% |
 
 `--gate` exit codes: `0` all green, `1` any yellow, `2` any red. (Note: argparse usage errors — a mistyped flag — also exit 2; check stderr to tell them apart from a red verdict. Hard errors — unreadable snapshot, dimension mismatch — exit 3.)

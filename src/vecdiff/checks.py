@@ -35,6 +35,9 @@ N2_NORM_SHIFT_YELLOW = 0.20  # <= 20% -> yellow, above -> red
 N2_OUTLIER_Z = 3.0           # norm z-score threshold for outliers
 N2_OUTLIER_GREEN = 0.01      # outlier fraction <= 1% -> green
 N2_OUTLIER_YELLOW = 0.05     # <= 5% -> yellow, above -> red
+N2_NORM_CV_EPS = 1e-6        # norm std/mean below this = constant norms
+                              # (pre-normalized embedder): z-scores are float
+                              # noise, so the outlier check is skipped
 
 # --- N4 duplicates ----------------------------------------------------------
 N4_YELLOW = 0.01  # duplicate pairs / n: 0 -> green, < 1% -> yellow, >= 1% -> red
@@ -311,7 +314,14 @@ def _pop_stats(snap: Snapshot, side: str) -> dict:
         "min": float(np.min(norms)),
         "max": float(np.max(norms)),
     }
-    if std > 0.0:
+    # Constant-norm snapshots (embedders that pre-normalize) make z-scores
+    # meaningless: a std of float rounding noise turns 1e-7 wobble into
+    # |z| > 3. Skip with an explicit reason instead of reporting noise.
+    constant_norms = mean > 0.0 and (std / mean) < N2_NORM_CV_EPS
+    if constant_norms:
+        z = np.zeros(snap.n)
+        out_mask = np.zeros(snap.n, dtype=bool)
+    elif std > 0.0:
         z = (norms - mean) / std
         out_mask = np.abs(z) > N2_OUTLIER_Z
     else:
@@ -336,6 +346,12 @@ def _pop_stats(snap: Snapshot, side: str) -> dict:
         "count": count,
         "fraction": count / snap.n,
         "examples": examples,
+        **(
+            {"skipped_reason": "norm variance ~0 (pre-normalized embedder?); "
+                               "z-scores would be float noise"}
+            if constant_norms
+            else {}
+        ),
     }
     return stats
 
@@ -380,6 +396,7 @@ def check_n2(snap_a: Snapshot, snap_b: Snapshot) -> tuple[dict, list[Finding]]:
             continue
         out = side_stats["outliers"]
         if out["count"] == 0:
+            reason = out.get("skipped_reason")
             findings.append(
                 Finding(
                     check="N2",
@@ -387,6 +404,7 @@ def check_n2(snap_a: Snapshot, snap_b: Snapshot) -> tuple[dict, list[Finding]]:
                     message=(
                         f"{side_stats['side']}: no extreme-norm outliers "
                         f"(|z| > {N2_OUTLIER_Z})"
+                        + (f" — {reason}" if reason else "")
                     ),
                     details={},
                 )
