@@ -81,3 +81,41 @@ def topk_cosine(
         out_idx[start:end] = np.take_along_axis(part, order, axis=1)
         out_sim[start:end] = np.take_along_axis(cand, order, axis=1)
     return out_idx, out_sim
+
+
+def topk_cosine_queries(
+    vectors: np.ndarray,
+    queries: np.ndarray,
+    k: int,
+    *,
+    block_bytes: int = DEFAULT_BLOCK_BYTES,
+    unit: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Top-k cosine neighbors for an *external* query matrix.
+
+    Unlike :func:`topk_cosine` the queries are not rows of ``vectors`` (they
+    are separate embedded query vectors), so there is no self-exclusion.
+    Used by the supervised canonical-query check (Q1). ``k_eff = min(k, n)``;
+    a zero-row index yields zero-column results.
+    """
+    v = unit if unit is not None else l2_normalize(vectors)
+    qu = l2_normalize(np.asarray(queries, dtype=np.float32))
+    n, m = v.shape[0], qu.shape[0]
+    k_eff = min(int(k), n)
+    if k_eff <= 0 or m == 0:
+        return (
+            np.zeros((m, max(k_eff, 0)), dtype=np.int64),
+            np.zeros((m, max(k_eff, 0)), dtype=np.float32),
+        )
+    out_idx = np.empty((m, k_eff), dtype=np.int64)
+    out_sim = np.empty((m, k_eff), dtype=np.float32)
+    step = block_rows(n, block_bytes)
+    for start in range(0, m, step):
+        end = min(m, start + step)
+        sims = qu[start:end] @ v.T  # (b, n) float32
+        part = np.argpartition(-sims, k_eff - 1, axis=1)[:, :k_eff]
+        cand = np.take_along_axis(sims, part, axis=1)
+        order = np.argsort(-cand, axis=1, kind="stable")
+        out_idx[start:end] = np.take_along_axis(part, order, axis=1)
+        out_sim[start:end] = np.take_along_axis(cand, order, axis=1)
+    return out_idx, out_sim

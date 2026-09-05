@@ -60,16 +60,25 @@ stripped from history with `git filter-repo` before going public, backup bundle 
       into CLI + console/JSON/Markdown reports; README signal table in
       lockstep. Note: N4 still counts bit-identical pairs in its cosine
       threshold scan — N5 is the diagnostic lens on top, not a partition.
-- [ ] **Canonical-query supervised check**: optional query set (extracted from user query
-      logs) compared across both indexes with rank-inversion report — complements the
-      unsupervised N1.
+- [x] **Canonical-query supervised check (Q1) — done 2026-09-06.**
+      `--queries-a/--queries-b` (jsonl {id, vector} per side, embedded with
+      that side's model — loader `snapshot.load_query_vectors`, non-finite
+      rejected): per-query top-k Jaccard + rank inversions over both indexes,
+      worst-query drill-down, N1-style thresholds as Q1_* constants (README
+      in lockstep). `knn.topk_cosine_queries` is the external-query variant
+      (no self-exclusion) with the same blocking.
 
 ## 4. v0.3 — the differentiator
 
-- [ ] **N3 orphan/ghost check via symbol graphs**: chunks whose symbols no longer exist,
-      audited against IndexStoreDB (iOS) / Kotlin symbol extraction. This is the
-      maintainer's static-analysis edge and the main structural advantage over Vectory —
-      design the Snapshot↔symbol-graph interface carefully (paths are the join key today).
+- [x] **N3 interface landed 2026-09-06 (file-level)**: `--paths-manifest`
+      (newline-separated existing source paths) + `check_orphans` grade
+      chunks whose path vanished (0 / <5% / >=5% thresholds). The
+      Snapshot<->symbol-graph join is paths, as specified.
+- [ ] **N3 symbol-level ghosts**: IndexStoreDB (iOS) / Kotlin symbol
+      extraction emitting a *richer* manifest (path -> surviving symbols) so
+      "file exists but all its symbols moved" also counts as rot. The check
+      interface is ready; the extractor is user-side tooling (never a
+      vecdiff dependency).
 
 ## 5. Known debts / honesty notes
 

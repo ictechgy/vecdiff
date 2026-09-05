@@ -177,3 +177,50 @@ def test_cli_n5_constant_vector_flagged(tmp_path, capsys):
     assert n5["largest_group"] == 61  # v[0] plus the 60 copies
     n5_findings = [f for f in rep["findings"] if f["check"] == "N5"]
     assert any(f["severity"] == "red" for f in n5_findings)
+
+
+def _write_queries(path, ids, vecs):
+    with open(path, "w", encoding="utf-8") as fh:
+        for i, qid in enumerate(ids):
+            fh.write(json.dumps({"id": qid, "vector": vecs[i].tolist()}) + "\n")
+
+
+def test_cli_supervised_queries_run(tmp_path, capsys):
+    rng = np.random.default_rng(51)
+    ids = make_ids(80)
+    v = rng.standard_normal((80, 16)).astype(np.float32)
+    q = rng.standard_normal((8, 16)).astype(np.float32)
+    a = write_dir(tmp_path / "a", ids, v)
+    b = write_dir(tmp_path / "b", ids, v + rng.standard_normal((80, 16)).astype(np.float32) * 0.01)
+    qids = [f"query_{i}" for i in range(8)]
+    _write_queries(tmp_path / "qa.jsonl", qids, q)
+    _write_queries(tmp_path / "qb.jsonl", qids, q)
+    code = main([str(a), str(b), "--full", "--queries-a", str(tmp_path / "qa.jsonl"),
+                 "--queries-b", str(tmp_path / "qb.jsonl")])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Q1 canonical queries (supervised" in out
+
+
+def test_cli_queries_must_come_in_pairs(tmp_path):
+    a, b = _pair(tmp_path, noisy=False, n=30)
+    with pytest.raises(SystemExit) as exc:
+        main([str(a), str(b), "--queries-a", "x.jsonl"])
+    assert exc.value.code == 2
+
+
+def test_cli_paths_manifest_orphans(tmp_path, capsys):
+    from conftest import make_paths
+
+    rng = np.random.default_rng(61)
+    ids = make_ids(50)
+    v = rng.standard_normal((50, 16)).astype(np.float32)
+    a = write_dir(tmp_path / "a", ids, v)
+    paths = make_paths(ids)
+    manifest = tmp_path / "tree.txt"
+    manifest.write_text("\n".join(paths[5:]) + "\n", encoding="utf-8")  # 10% orphans
+    code = main([str(a), str(a), "--paths-manifest", str(manifest), "--gate"])
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "N3 orphan chunks" in out
+    assert "orphan" in out

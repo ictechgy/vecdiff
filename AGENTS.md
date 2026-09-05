@@ -2,7 +2,8 @@
 
 Diffs two embedding-index snapshots (blue/green of a vector-DB migration, or
 now-vs-later of a rot audit) and reports graded findings: N1 neighbor stability,
-N2 population stats, N4 duplicates, N5 constant vectors. Evidence for human
+N2 population stats, N4 duplicates, N5 constant vectors, plus optional Q1
+(supervised canonical queries) and N3 (orphan rot audit). Evidence for human
 judgment — never a verdict like "model B is better". See README.md for signal
 thresholds and differentiation vs Vectory / Ragas / MTEB.
 
@@ -12,7 +13,7 @@ thresholds and differentiation vs Vectory / Ragas / MTEB.
 src/vecdiff/
   snapshot.py  Snapshot dataclass + adapters (native dir/npz, jsonl universal, sqlite, faiss-optional) + strict validation; snapshot_from_arrays() builds in-memory Snapshots (the any-vector-DB programmatic path)
   knn.py       exact brute-force cosine top-k in memory-bounded blocks; l2_normalize
-  checks.py    N1/N2/N4/N5 — thresholds are module constants; Finding dataclass; gate semantics
+  checks.py    N1/N2/N4/N5 + optional Q1 (supervised queries) and N3 (path-manifest orphans) — thresholds are module constants; Finding dataclass; gate semantics
   report.py    console / JSON / Markdown rendering of the plain-dict report
   cli.py       argparse; arg validation; error → exit 3, gate verdicts → exit 0/1/2
   errors.py    VecdiffError hierarchy (SnapshotError, DimensionMismatchError)

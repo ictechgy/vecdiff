@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from . import checks
 from . import report as rpt
 from .errors import VecdiffError
+from .errors import SnapshotError
 from .snapshot import load_snapshot
 
 
@@ -72,6 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", metavar="OUT", help="also write the report as JSON to OUT")
     p.add_argument("--markdown", metavar="OUT", help="also write the report as Markdown to OUT")
     p.add_argument(
+        "--queries-a",
+        metavar="FILE",
+        help="supervised Q1: canonical queries for side A, jsonl {id, vector} "
+        "(embedded with A's model); requires --queries-b",
+    )
+    p.add_argument(
+        "--queries-b",
+        metavar="FILE",
+        help="supervised Q1: canonical queries for side B, jsonl {id, vector} "
+        "(embedded with B's model); requires --queries-a",
+    )
+    p.add_argument(
+        "--paths-manifest",
+        metavar="FILE",
+        help="N3 rot audit: newline-separated source paths that currently "
+        "exist (e.g. `find src -type f`); chunks whose path is absent are "
+        "orphans",
+    )
+    p.add_argument(
         "--gate",
         action="store_true",
         help="CI gate: exit 2 if any RED finding, 1 if any YELLOW, 0 otherwise",
@@ -90,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--sample must be in (0, 1]")
     if not (0.0 < args.dup_threshold <= 1.0):
         parser.error("--dup-threshold must be in (0, 1]")
+    if bool(args.queries_a) != bool(args.queries_b):
+        parser.error("--queries-a and --queries-b must be given together")
 
     try:
         snap_a = load_snapshot(args.snapshot_a, args.format)
@@ -119,8 +142,47 @@ def main(argv: list[str] | None = None) -> int:
             n1_findings + n2_findings + n4_a_findings + n4_b_findings
             + n5_a_findings + n5_b_findings
         )
-
         notes: list[str] = []
+
+        q1_stats: dict | None = None
+        if args.queries_a:
+            from .snapshot import load_query_vectors
+
+            q_ids, q_vecs_a = load_query_vectors(args.queries_a)
+            q_ids_b, q_vecs_b = load_query_vectors(args.queries_b)
+            if q_ids != q_ids_b:
+                raise SnapshotError(
+                    "--queries-a and --queries-b must carry the same query ids "
+                    "in the same order (embed the same query set per side)"
+                )
+            q1_stats, q1_findings = checks.check_queries(
+                snap_a, snap_b, q_ids, q_vecs_a, q_vecs_b, k=args.k
+            )
+            findings += q1_findings
+            notes.append(
+                "Q1 is supervised: each side's queries must be embedded with "
+                "that side's model; Jaccard measures result-set survival for "
+                "the supplied queries only."
+            )
+
+        n3_stats: dict | None = None
+        if args.paths_manifest:
+            try:
+                manifest_text = Path(args.paths_manifest).read_text(encoding="utf-8")
+            except OSError as exc:
+                raise SnapshotError(
+                    f"could not read paths manifest '{args.paths_manifest}': {exc}"
+                ) from exc
+            existing = {
+                line.strip()
+                for line in manifest_text.splitlines()
+                if line.strip() and not line.startswith("#")
+            }
+            n3_a_stats, n3_a_findings = checks.check_orphans(snap_a, "A", existing)
+            n3_b_stats, n3_b_findings = checks.check_orphans(snap_b, "B", existing)
+            n3_stats = {"A": n3_a_stats, "B": n3_b_stats}
+            findings += n3_a_findings + n3_b_findings
+
         if not args.full and n1_stats.get("mode") == "sampled":
             notes.append(
                 f"N1 ran on a sample of shared ids ({n1_stats['sampled_ids']}/"
@@ -155,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
             n2_stats=n2_stats,
             n4_stats={"A": n4_a_stats, "B": n4_b_stats},
             n5_stats={"A": n5_a_stats, "B": n5_b_stats},
+            q1_stats=q1_stats,
+            n3_stats=n3_stats,
             findings=findings,
             notes=notes,
             gate=args.gate,

@@ -12,12 +12,13 @@ README's signal table.
 from __future__ import annotations
 
 import math
+import posixpath
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from .errors import DimensionMismatchError
-from .knn import block_rows, topk_cosine
+from .knn import block_rows, topk_cosine, topk_cosine_queries
 from .snapshot import Snapshot, dir_of
 
 # --- N1 neighbor stability -------------------------------------------------
@@ -692,4 +693,246 @@ def check_n5(
     findings.append(
         Finding(check="N5", severity=sev, message=message, details=stats)
     )
+    return stats, findings
+
+
+# ---------------------------------------------------------------------------
+# Q1 — supervised canonical queries
+# ---------------------------------------------------------------------------
+
+# Thresholds mirror N1's by design (they measure the same quantity — top-k
+# neighborhood survival — just over real queries instead of chunk ids).
+Q1_MEAN_GREEN = 0.90
+Q1_MEAN_YELLOW = 0.70
+Q1_HEAVY_LOSS_JACCARD = 0.30
+Q1_HEAVY_GREEN = 0.02
+Q1_HEAVY_YELLOW = 0.10
+Q1_RANK_INVERSION_BIG = 5
+Q1_WORST_LISTED = 10
+
+
+def check_queries(
+    snap_a: Snapshot,
+    snap_b: Snapshot,
+    query_ids: list[str],
+    queries_a: np.ndarray,
+    queries_b: np.ndarray,
+    *,
+    k: int = 10,
+) -> tuple[dict, list[Finding]]:
+    """Run the same canonical queries through both indexes and compare.
+
+    Queries arrive per side, each embedded with that side's model — the
+    supervised complement to N1: it measures what real retrieval traffic
+    would see, including queries whose neighborhoods were invisible in the
+    chunk-id comparison.
+    """
+    if int(k) < 1:
+        raise ValueError(f"k must be >= 1, got {k}")
+    stats: dict = {
+        "k_requested": int(k),
+        "mode": "supervised",
+        "queries_given": len(query_ids),
+    }
+    findings: list[Finding] = []
+
+    for side, snap, queries in (("A", snap_a, queries_a), ("B", snap_b, queries_b)):
+        if queries.shape[0] and queries.shape[1] != snap.dim:
+            raise DimensionMismatchError(
+                f"query vector dim {queries.shape[1]} does not match snapshot "
+                f"{side} dim {snap.dim} (model {snap.model!r}) — each side's "
+                "queries must be embedded with that side's model."
+            )
+
+    # query ids are independent of chunk ids: every supplied query runs
+    stats["queries"] = len(query_ids)
+    if snap_a.n == 0 or snap_b.n == 0 or len(query_ids) == 0:
+        findings.append(
+            Finding(
+                check="Q1",
+                severity="yellow",
+                message=(
+                    f"Q1 skipped: needs >= 1 query and non-empty snapshots "
+                    f"(queries={len(query_ids)}, A n={snap_a.n}, B n={snap_b.n})"
+                ),
+                details=stats,
+            )
+        )
+        return stats, findings
+
+    k_eff = min(int(k), snap_a.n, snap_b.n)
+    neigh_a, _ = topk_cosine_queries(
+        snap_a.vectors, queries_a, k_eff, unit=snap_a.unit_vectors()
+    )
+    neigh_b, _ = topk_cosine_queries(
+        snap_b.vectors, queries_b, k_eff, unit=snap_b.unit_vectors()
+    )
+    ids_a, ids_b = snap_a.ids, snap_b.ids
+
+    jaccards: list[float] = []
+    inversion_abs: list[int] = []
+    per_query: list[dict] = []
+    ids_with_big_inversion = 0
+    heavy: list[str] = []
+    for qi, qid in enumerate(query_ids):
+        set_a = {ids_a[j] for j in neigh_a[qi]}
+        set_b = {ids_b[j] for j in neigh_b[qi]}
+        inter = set_a & set_b
+        union = set_a | set_b
+        jac = len(inter) / len(union) if union else 1.0
+        jaccards.append(jac)
+        if jac <= Q1_HEAVY_LOSS_JACCARD:
+            heavy.append(qid)
+        rank_a = {id_: pos for pos, id_ in enumerate(ids_a[j] for j in neigh_a[qi])}
+        rank_b = {id_: pos for pos, id_ in enumerate(ids_b[j] for j in neigh_b[qi])}
+        diffs = [abs(rank_a[cid] - rank_b[cid]) for cid in inter]
+        inversion_abs.extend(diffs)
+        big = bool(diffs) and max(diffs) >= Q1_RANK_INVERSION_BIG
+        ids_with_big_inversion += big
+        per_query.append(
+            {"id": qid, "jaccard": jac, "max_rank_delta": max(diffs) if diffs else 0}
+        )
+
+    mean_j = float(np.mean(jaccards)) if jaccards else 1.0
+    heavy_frac = len(heavy) / len(query_ids)
+    per_query.sort(key=lambda d: d["jaccard"])
+    stats.update(
+        {
+            "k_effective": int(k_eff),
+            "mean_jaccard": mean_j,
+            "jaccard_percentiles": _percentiles(jaccards),
+            "heavy_loss_queries": heavy[:Q1_WORST_LISTED],
+            "heavy_loss_count": len(heavy),
+            "heavy_loss_fraction": heavy_frac,
+            "rank_inversion": {
+                "mean_abs_delta": float(np.mean(inversion_abs)) if inversion_abs else 0.0,
+                "max_abs_delta": int(max(inversion_abs)) if inversion_abs else 0,
+                "queries_with_inversion_ge_5_fraction": (
+                    ids_with_big_inversion / len(query_ids)
+                ),
+            },
+            "worst_queries": per_query[:Q1_WORST_LISTED],
+        }
+    )
+
+    if mean_j >= Q1_MEAN_GREEN:
+        sev = "green"
+        tail = "query results stable across indexes"
+    elif mean_j >= Q1_MEAN_YELLOW:
+        sev = "yellow"
+        tail = "query drift — spot-check the worst queries before cutover"
+    else:
+        sev = "red"
+        tail = "query results rebuilt — treat as a cutover-review signal"
+    findings.append(
+        Finding(
+            check="Q1",
+            severity=sev,
+            message=(
+                f"canonical-query mean Jaccard {mean_j:.2f} (k={k_eff}, "
+                f"n={len(query_ids)}; thresholds: green >= {Q1_MEAN_GREEN}, "
+                f"yellow >= {Q1_MEAN_YELLOW}) — {tail}"
+            ),
+            details={"mean_jaccard": mean_j},
+        )
+    )
+    if heavy:
+        if heavy_frac >= Q1_HEAVY_YELLOW:
+            sev = "red"
+        elif heavy_frac >= Q1_HEAVY_GREEN:
+            sev = "yellow"
+        else:
+            sev = "green"
+        findings.append(
+            Finding(
+                check="Q1",
+                severity=sev,
+                message=(
+                    f"{len(heavy)} quer{'y' if len(heavy) == 1 else 'ies'} lost "
+                    f">= 70% of their top-{k_eff} results (Jaccard <= "
+                    f"{Q1_HEAVY_LOSS_JACCARD}; thresholds: green < "
+                    f"{Q1_HEAVY_GREEN:.0%}, yellow < {Q1_HEAVY_YELLOW:.0%} of "
+                    f"queries), e.g. {heavy[:3]}"
+                ),
+                details={"heavy_queries": heavy[:50]},
+            )
+        )
+    return stats, findings
+
+
+# ---------------------------------------------------------------------------
+# N3 — orphans (rot audit against a path manifest)
+# ---------------------------------------------------------------------------
+
+N3_ORPHAN_YELLOW = 0.05  # orphan fraction: 0 -> green, < 5% -> yellow, >= 5% -> red
+
+
+def check_orphans(
+    snap: Snapshot,
+    side: str,
+    existing_paths: set[str],
+) -> tuple[dict, list[Finding]]:
+    """Chunks whose source path is absent from the current-tree manifest.
+
+    The manifest is the Snapshot<->symbol-graph join interface (paths are
+    the join key): today it is a plain list of existing source paths —
+    `find src -type f` is enough. Symbol-level ghost detection (IndexStoreDB
+    / Kotlin symbol extraction) plugs into the same interface later by
+    producing a richer manifest.
+    """
+    stats: dict = {
+        "side": side,
+        "n": snap.n,
+        "manifest_paths": len(existing_paths),
+        "with_path_metadata": 0,
+        "orphans": 0,
+        "orphan_fraction": 0.0,
+        "examples": [],
+    }
+    findings: list[Finding] = []
+    if snap.paths is None:
+        findings.append(
+            Finding(
+                check="N3",
+                severity="yellow",
+                message=(
+                    f"N3 skipped for {side}: no chunk_paths metadata (export "
+                    "with per-chunk paths to enable the rot audit)"
+                ),
+                details=stats,
+            )
+        )
+        return stats, findings
+
+    def norm(p: str) -> str:
+        return posixpath.normpath(p.replace("\\", "/"))
+
+    existing = {norm(x) for x in existing_paths}
+    orphans: list[str] = []
+    for cid, raw in zip(snap.ids, snap.paths):
+        stats["with_path_metadata"] += 1
+        if norm(raw) not in existing:
+            orphans.append(cid)
+    frac = len(orphans) / snap.n if snap.n else 0.0
+    stats["orphans"] = len(orphans)
+    stats["orphan_fraction"] = frac
+    stats["examples"] = orphans[:50]
+    if not orphans:
+        sev = "green"
+        message = (
+            f"{side}: no orphan chunks (all {snap.n} chunk paths exist in the "
+            f"manifest of {len(existing)} paths)"
+        )
+    else:
+        if frac >= N3_ORPHAN_YELLOW:
+            sev = "red"
+        else:
+            sev = "yellow"
+        sample = [snap.paths[snap.ids.index(cid)] for cid in orphans[:3]]
+        message = (
+            f"{side}: {len(orphans)} orphan chunk(s) — source path no longer "
+            f"exists ({frac:.1%} of {snap.n}; thresholds: green == 0, yellow < "
+            f"{N3_ORPHAN_YELLOW:.0%}), e.g. {sample}"
+        )
+    findings.append(Finding(check="N3", severity=sev, message=message, details=stats))
     return stats, findings

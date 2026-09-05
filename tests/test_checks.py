@@ -390,3 +390,97 @@ def test_n5_near_duplicate_not_bit_identical():
     stats, findings = checks.check_n5(make_snapshot(ids, v), "A")
     assert stats["groups"] == 0
     assert findings[0].severity == "green"
+
+
+# ---------------------------------------------------------------------------
+# Q1 canonical queries (supervised)
+# ---------------------------------------------------------------------------
+
+
+def _queries(n, d, seed=17):
+    rng = np.random.default_rng(seed)
+    return rng.standard_normal((n, d)).astype(np.float32)
+
+
+def test_q1_identical_indexes_all_green():
+    ids = make_ids(60)
+    v = _base(60, 16)
+    q = _queries(10, 16)
+    a = make_snapshot(ids, v)
+    stats, findings = checks.check_queries(a, make_snapshot(ids, v.copy()), [f"q{i}" for i in range(10)], q, q.copy(), k=5)
+    assert stats["mean_jaccard"] == 1.0
+    assert checks.worst_severity(findings) == "green"
+
+
+def test_q1_rebuilt_index_flagged():
+    ids = make_ids(80)
+    v = _base(80, 16)
+    w = _base(80, 16, seed=2)  # independent space -> results rebuilt
+    q = _queries(12, 16)
+    stats, findings = checks.check_queries(
+        make_snapshot(ids, v), make_snapshot(ids, w), [f"q{i}" for i in range(12)], q, q.copy()
+    )
+    assert stats["mean_jaccard"] < checks.Q1_MEAN_YELLOW
+    assert checks.worst_severity(findings) == "red"
+    worst = stats["worst_queries"][0]
+    assert worst["jaccard"] <= stats["worst_queries"][-1]["jaccard"]  # sorted
+
+
+def test_q1_dim_mismatch_hard_error():
+    a = make_snapshot(make_ids(10), _base(10, 16))
+    b = make_snapshot(make_ids(10), _base(10, 16, seed=1))
+    with pytest.raises(DimensionMismatchError, match="query vector dim"):
+        checks.check_queries(a, b, ["q0"], _queries(1, 16), _queries(1, 8))
+
+
+def test_q1_no_queries_yellow_skip():
+    a = make_snapshot(make_ids(10), _base(10, 16))
+    stats, findings = checks.check_queries(a, a, [], np.zeros((0, 0), np.float32), np.zeros((0, 0), np.float32))
+    assert findings[0].severity == "yellow"
+    assert "skipped" in findings[0].message
+
+
+def test_q1_k_guard():
+    a = make_snapshot(make_ids(10), _base(10, 16))
+    with pytest.raises(ValueError, match="k must be >= 1"):
+        checks.check_queries(a, a, ["q"], _queries(1, 16), _queries(1, 16), k=0)
+
+
+# ---------------------------------------------------------------------------
+# N3 orphans (path manifest)
+# ---------------------------------------------------------------------------
+
+
+def test_n3_no_orphans_green():
+    ids = make_ids(30)
+    snap = make_snapshot(ids, _base(30, 8))  # conftest assigns src/mod_*/file_*.py
+    manifest = set(snap.paths)
+    stats, findings = checks.check_orphans(snap, "A", manifest)
+    assert stats["orphans"] == 0
+    assert findings[0].severity == "green"
+
+
+def test_n3_orphans_graded():
+    ids = make_ids(100)
+    snap = make_snapshot(ids, _base(100, 8))
+    keep = set(snap.paths[10:])  # drop 10 paths -> 10% orphans -> red
+    stats, findings = checks.check_orphans(snap, "A", keep)
+    assert stats["orphans"] == 10
+    assert stats["orphan_fraction"] == pytest.approx(0.10)
+    assert findings[0].severity == "red"
+    keep2 = set(snap.paths[1:])  # 1% -> yellow (nonzero but < 5%)
+    _, f2 = checks.check_orphans(snap, "A", keep2)
+    assert f2[0].severity == "yellow"
+
+
+def test_n3_path_normalization():
+    snap = make_snapshot(["a"], _base(1, 8), paths=["./src/x.py"])
+    stats, findings = checks.check_orphans(snap, "A", {"src/x.py"})
+    assert stats["orphans"] == 0  # "./src/x.py" normalizes onto "src/x.py"
+
+
+def test_n3_no_path_metadata_yellow():
+    snap = make_snapshot(make_ids(5), _base(5, 8), paths=None)
+    stats, findings = checks.check_orphans(snap, "A", {"src/x.py"})
+    assert findings[0].severity == "yellow"
+    assert "no chunk_paths" in findings[0].message

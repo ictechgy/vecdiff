@@ -749,3 +749,77 @@ def _build_snapshot(
 def dir_of(path: str) -> str:
     """Directory portion of a chunk path, POSIX-normalized ('' if none)."""
     return posixpath.dirname(path.replace("\\", "/"))
+
+
+def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
+    """Load canonical-query vectors: jsonl ``{"id", "vector"}`` per line.
+
+    Companion to the supervised Q1 check: queries are embedded per side
+    (each snapshot's own model), so a query file carries ids + vectors and
+    nothing else. Validation mirrors the jsonl snapshot adapter, including
+    the non-finite rejection. Returns ``(ids, vectors (n, dim) float32)``.
+    """
+    import gzip
+
+    p = Path(path)
+    if not p.is_file():
+        raise SnapshotError(f"query file does not exist: {p}")
+    ids: list[str] = []
+    rows: list[list[float]] = []
+    dim = 0
+    opener = gzip.open if p.name.lower().endswith(".gz") else open
+    try:
+        with opener(p, "rt", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} is not valid JSON: {exc}"
+                    ) from exc
+                if not isinstance(obj, dict) or "id" not in obj or "vector" not in obj:
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} must be an object with "
+                        "keys id, vector"
+                    )
+                if not isinstance(obj["id"], str):
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} 'id' must be a string"
+                    )
+                vec = obj["vector"]
+                if (
+                    not isinstance(vec, list)
+                    or not vec
+                    or not all(
+                        isinstance(x, (int, float)) and not isinstance(x, bool)
+                        for x in vec
+                    )
+                ):
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} 'vector' must be a "
+                        "non-empty list of numbers"
+                    )
+                row = [float(x) for x in vec]
+                if dim == 0:
+                    dim = len(row)
+                elif len(row) != dim:
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} has vector length "
+                        f"{len(row)}, expected {dim}"
+                    )
+                ids.append(obj["id"])
+                rows.append(row)
+    except SnapshotError:
+        raise
+    except (OSError, gzip.BadGzipFile, EOFError, UnicodeDecodeError) as exc:
+        raise SnapshotError(f"could not read query file '{p}': {exc}") from exc
+    if len(set(ids)) != len(ids):
+        raise SnapshotError(f"query file '{p}': duplicate query ids")
+    if not rows:
+        return [], np.zeros((0, 0), dtype=np.float32)
+    vectors = np.asarray(rows, dtype=np.float32)
+    _require_finite(vectors, ids, str(p))
+    return ids, vectors

@@ -127,3 +127,43 @@ n1_stats, n1 = check_n1(snap_a, snap_b, full=True)
   pool; a filtered export changes neighbors for chunks you didn't touch.
 - Same `dim` on both sides; a dimension mismatch is a hard error (exit 3)
   and means the two snapshots are not comparable.
+
+## Canonical queries for Q1 (supervised check)
+
+Q1 needs the *same* query set embedded twice — once per side's model. Pull
+real queries from your query logs and embed them with each pipeline:
+
+```python
+# produce qa.jsonl / qb.jsonl from the same query ids
+from vecdiff_case_study_helpers import embed  # your embedding step
+import json
+
+queries = ["how is auth token refreshed", "find retry logic", ...]  # from logs
+for tag, model in (("a", "old-model"), ("b", "new-model")):
+    vecs = embed(queries, model)  # your side's embedder
+    with open(f"q{tag}.jsonl", "w") as f:
+        for qid, vec in zip(queries, vecs):
+            f.write(json.dumps({"id": f"q{qid[:32]}", "vector": list(map(float, vec))}) + "\n")
+```
+
+```bash
+vecdiff A.jsonl B.jsonl --full --queries-a qa.jsonl --queries-b qb.jsonl --gate
+```
+
+Ids must match across the two files (same set, same order). Dim must match
+each side's snapshot — embed each side's queries with that side's model.
+
+## Paths manifest for N3 (rot audit)
+
+N3 finds chunks whose source file no longer exists. The manifest is just the
+current file list — paths are the join key:
+
+```bash
+git ls-files > tree.txt        # or: find src -type f | sort > tree.txt
+vecdiff A.jsonl B.jsonl --paths-manifest tree.txt --gate
+```
+
+Paths normalize POSIX-style (`./src/x.py` matches `src/x.py`), `#` comments
+are ignored. Symbol-level ghost detection (iOS IndexStoreDB / Kotlin symbol
+extraction) is designed to plug into this same interface later: emit a
+richer manifest and the check stays compatible.

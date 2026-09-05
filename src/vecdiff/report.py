@@ -25,6 +25,8 @@ def build_report(
     n4_stats: dict,
     n5_stats: dict,
     findings: list[Finding],
+    q1_stats: dict | None = None,
+    n3_stats: dict | None = None,
     notes: list[str],
     gate: bool,
 ) -> dict:
@@ -41,7 +43,14 @@ def build_report(
         "snapshots": {"a": snapshot_a_summary, "b": snapshot_b_summary},
         "params": {k: v for k, v in params.items() if k != "version"},
         "shared_ids": shared,
-        "checks": {"N1": n1_stats, "N2": n2_stats, "N4": n4_stats, "N5": n5_stats},
+        "checks": {
+            "N1": n1_stats,
+            "N2": n2_stats,
+            "N4": n4_stats,
+            "N5": n5_stats,
+            **({"Q1": q1_stats} if q1_stats is not None else {}),
+            **({"N3": n3_stats} if n3_stats is not None else {}),
+        },
         "findings": [
             {
                 "check": f.check,
@@ -190,6 +199,46 @@ def render_console(rep: dict) -> str:
             f"({side_stats['largest_group_fraction']:.1%} of {side_stats['n']})"
         )
 
+    if "Q1" in rep["checks"]:
+        q1 = rep["checks"]["Q1"]
+        lines.append("")
+        lines.append(
+            f"Q1 canonical queries (supervised, k={q1.get('k_effective', '?')}, "
+            f"n={q1.get('queries', 0)})"
+        )
+        if "mean_jaccard" in q1:
+            pct = q1["jaccard_percentiles"]
+            inv = q1["rank_inversion"]
+            lines.append(
+                f"  mean Jaccard {_fmt(q1['mean_jaccard'])} | "
+                f"p10 {_fmt(pct.get('p10', 0))} p50 {_fmt(pct.get('p50', 0))} "
+                f"p90 {_fmt(pct.get('p90', 0))}"
+            )
+            lines.append(
+                f"  rank inversion: mean |dRank| {_fmt(inv['mean_abs_delta'], 2)}, "
+                f"max {inv['max_abs_delta']}, queries with inversion >= 5: "
+                f"{inv['queries_with_inversion_ge_5_fraction']:.1%}"
+            )
+            lines.append(
+                f"  heavy-loss queries (Jaccard <= 0.30): {q1['heavy_loss_count']} "
+                f"({q1['heavy_loss_fraction']:.1%} of queries)"
+            )
+        else:
+            lines.append("  (skipped - see findings)")
+
+    if "N3" in rep["checks"]:
+        lines.append("")
+        lines.append("N3 orphan chunks (vs paths manifest)")
+        for side_stats in rep["checks"]["N3"].values():
+            if "orphan_fraction" in side_stats:
+                lines.append(
+                    f"  {side_stats['side']}: {side_stats['orphans']} orphan(s) "
+                    f"({side_stats['orphan_fraction']:.1%} of {side_stats['n']}, "
+                    f"manifest {side_stats['manifest_paths']} paths)"
+                )
+            else:
+                lines.append(f"  {side_stats['side']}: skipped (no path metadata)")
+
     lines.append("")
     lines.append("Findings (graded signals; thresholds inline)")
     for f in rep["findings"]:
@@ -337,6 +386,42 @@ def render_markdown(rep: dict) -> str:
             f"{side_stats['ids_in_groups']} | {side_stats['largest_group']} | "
             f"{side_stats['largest_group_fraction']:.1%} |"
         )
+
+    if "Q1" in rep["checks"]:
+        q1 = rep["checks"]["Q1"]
+        out.append("")
+        out.append("### Q1 canonical queries (supervised)")
+        out.append("")
+        if "mean_jaccard" in q1:
+            inv = q1["rank_inversion"]
+            out.append(f"- queries: {q1['queries']} (k={q1['k_effective']})")
+            out.append(f"- mean Jaccard: **{q1['mean_jaccard']:.3f}**")
+            out.append(
+                f"- rank inversion: mean |dRank| {inv['mean_abs_delta']:.2f}, max "
+                f"{inv['max_abs_delta']}, queries with inversion >= 5: "
+                f"{inv['queries_with_inversion_ge_5_fraction']:.1%}"
+            )
+            if q1["heavy_loss_count"]:
+                out.append(
+                    f"- heavy-loss queries (Jaccard <= 0.30): "
+                    f"{q1['heavy_loss_count']} ({q1['heavy_loss_fraction']:.1%})"
+                )
+        else:
+            out.append("- skipped (see findings)")
+
+    if "N3" in rep["checks"]:
+        out.append("")
+        out.append("### N3 orphan chunks (vs paths manifest)")
+        out.append("")
+        out.append("| side | orphans | fraction | manifest paths |")
+        out.append("|---|---|---|---|")
+        for side_stats in rep["checks"]["N3"].values():
+            if "orphan_fraction" in side_stats:
+                out.append(
+                    f"| {side_stats['side']} | {side_stats['orphans']} | "
+                    f"{side_stats['orphan_fraction']:.1%} | "
+                    f"{side_stats['manifest_paths']} |"
+                )
 
     out.append("")
     out.append("## Findings")
