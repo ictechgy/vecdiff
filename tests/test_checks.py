@@ -273,3 +273,12 @@ def test_gate_exit_codes():
     assert checks.gate_exit_code([Finding("N4", "yellow", "y"),
                                   Finding("N1", "red", "z")]) == 2
     assert checks.worst_severity([Finding("N4", "yellow", "y")]) == "yellow"
+
+
+def test_unit_vectors_cached_and_unit_norm():
+    ids = make_ids(16)
+    snap = make_snapshot(ids, _base(16, 8))
+    u1 = snap.unit_vectors()
+    u2 = snap.unit_vectors()
+    assert u1 is u2  # cached: N1 + N4 share one normalized copy
+    np.testing.assert_allclose(np.linalg.norm(u1, axis=1), 1.0, rtol=1e-5)

@@ -62,10 +62,24 @@ class Snapshot:
     source: str  # filesystem path this was loaded from
     adapter: str  # "native" | "sqlite" | "faiss"
     notes: list[str] = field(default_factory=list)  # honest provenance notes
+    _unit: np.ndarray | None = field(default=None, repr=False, compare=False)
 
     @property
     def n(self) -> int:
         return len(self.ids)
+
+    def unit_vectors(self) -> np.ndarray:
+        """L2-normalized vectors, computed once and cached.
+
+        N1 and N4 both need normalized copies; normalizing is a full (n, dim)
+        allocation per call, so at 100k x 1024 the cache saves ~400 MB per
+        redundant pass.
+        """
+        if self._unit is None:
+            from .knn import l2_normalize
+
+            self._unit = l2_normalize(self.vectors)
+        return self._unit
 
     def index_of(self) -> dict[str, int]:
         return {id_: i for i, id_ in enumerate(self.ids)}
@@ -255,7 +269,10 @@ def _read_json(meta_path: Path) -> dict:
 def _load_sqlite(p: Path) -> Snapshot:
     if p.is_dir():
         raise SnapshotError(f"sqlite snapshot must be a file, got directory: {p}")
-    uri = f"file:{p}?mode=ro"
+    # as_uri() percent-encodes '?'/'#'/spaces etc.; appending '?mode=ro' to a
+    # raw path would let those characters split the URI and silently open an
+    # empty database.
+    uri = p.resolve().as_uri() + "?mode=ro"
     try:
         con = sqlite3.connect(uri, uri=True)
     except sqlite3.Error as exc:

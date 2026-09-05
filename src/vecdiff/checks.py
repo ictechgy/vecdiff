@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .errors import DimensionMismatchError
-from .knn import l2_normalize, topk_cosine
+from .knn import topk_cosine
 from .snapshot import Snapshot, dir_of
 
 # --- N1 neighbor stability -------------------------------------------------
@@ -146,8 +146,8 @@ def check_n1(
     k_eff = min(int(k), snap_a.n - 1, snap_b.n - 1)
     qa = np.array([index_a[i] for i in sampled], dtype=np.int64)
     qb = np.array([index_b[i] for i in sampled], dtype=np.int64)
-    neigh_a, _ = topk_cosine(snap_a.vectors, qa, k_eff)
-    neigh_b, _ = topk_cosine(snap_b.vectors, qb, k_eff)
+    neigh_a, _ = topk_cosine(snap_a.vectors, qa, k_eff, unit=snap_a.unit_vectors())
+    neigh_b, _ = topk_cosine(snap_b.vectors, qb, k_eff, unit=snap_b.unit_vectors())
 
     ids_a = snap_a.ids
     ids_b = snap_b.ids
@@ -480,7 +480,7 @@ def check_n4(
         )
         return stats, findings
 
-    v = l2_normalize(snap.vectors)
+    v = snap.unit_vectors()
     from .knn import block_rows  # local import to avoid cycle noise
 
     pair_count = 0

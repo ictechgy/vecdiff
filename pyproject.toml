@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vecdiff"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Diff two embedding-index snapshots: neighbor stability, population stats, duplicates. Fully local, numpy-only."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -52,3 +52,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.setuptools.dynamic]
+version = { attr = "vecdiff.__version__" }

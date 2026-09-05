@@ -283,3 +283,19 @@ def test_detect_format(tmp_path):
 def test_missing_path(tmp_path):
     with pytest.raises(SnapshotError, match="does not exist"):
         load_snapshot(tmp_path / "nope")
+
+
+def test_sqlite_path_with_special_characters(tmp_path):
+    d = tmp_path / "we?ird #dir"
+    d.mkdir()
+    con = sqlite3.connect(d / "snap.db")
+    con.execute("CREATE TABLE chunks(id TEXT PRIMARY KEY, vec BLOB)")
+    for i in range(4):
+        con.execute(
+            "INSERT INTO chunks VALUES (?,?)",
+            (f"c{i}", np.eye(4, dtype=np.float32)[i].tobytes()),
+        )
+    con.commit()
+    con.close()
+    snap = load_snapshot(d / "snap.db")
+    assert snap.n == 4

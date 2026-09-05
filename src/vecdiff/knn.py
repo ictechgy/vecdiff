@@ -38,18 +38,21 @@ def topk_cosine(
     k: int,
     *,
     block_bytes: int = DEFAULT_BLOCK_BYTES,
+    unit: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Top-k cosine neighbors for the given query rows.
 
     The candidate pool is *all* rows of ``vectors`` (the full index), and
-    each query's own row is excluded from its result.
+    each query's own row is excluded from its result. Pass ``unit`` (the
+    pre-normalized candidate matrix, e.g. ``Snapshot.unit_vectors()``) to
+    skip a redundant full-array normalization.
 
     Returns ``(neighbor_indices (q, k_eff) int64, similarities (q, k_eff)
     float32)`` sorted by similarity descending (ties broken by stable sort,
     i.e. lower index first). ``k_eff = min(k, n - 1)``; if ``n <= 1`` the
     arrays have zero columns.
     """
-    v = l2_normalize(vectors)
+    v = unit if unit is not None else l2_normalize(vectors)
     n = v.shape[0]
     q_idx = np.asarray(query_indices, dtype=np.int64)
     q = v[q_idx]
