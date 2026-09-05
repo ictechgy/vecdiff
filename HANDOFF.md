@@ -9,10 +9,19 @@ stripped from history with `git filter-repo` before going public, backup bundle 
 
 ## 1. Do first — dogfood and capture the launch story
 
-- [ ] **Run it on a real code-embedding index.** The maintainer has a dev-side code
-      semantic-search pipeline (local vector DB over Android/iOS codebases). Export two
-      real snapshots (e.g. current index vs a candidate new embedding model) via the
-      native adapter, run `vecdiff --full --json --markdown`, and keep the full report.
+- [x] **Case study captured 2026-09-06.** The maintainer's private
+      code-search pipeline was not present on this machine, so the case study
+      was built from ~12k lines of real local code (six projects, five
+      anonymized) × two real models (bge-small-en-v1.5 vs all-MiniLM-L6-v2,
+      371 stable chunk ids), exported via the jsonl adapter:
+      `docs/case_study/` (README + report.md + report.json + export script).
+      Headline: mean Jaccard 0.33, 42.6% heavy-loss, concentrated by
+      directory, gate exit 2 — framed as evidence for cutover review, not a
+      model ranking. Dogfooding also surfaced and fixed the N2
+      pre-normalized-embedder false positive (norm variance ≈ 0 → outlier
+      check skipped with reason).
+- [ ] (Optional) An additional internal run on the real dev pipeline, if it
+      lives on another machine, would strengthen the story further.
 - [ ] That report becomes the README/launch case study ("N1 flagged X chunks concentrated
       in src/auth; N4 caught Y re-chunking duplicates") — the launch
       strategy explicitly calls for one real case, and the re-embedding guide blogs

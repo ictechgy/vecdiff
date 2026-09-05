@@ -67,6 +67,16 @@ The N2 outlier check is skipped (reported green, with the reason inline) when no
 
 N1 is exact per queried chunk but samples shared ids by default (`--sample 0.2`, `--seed 0` — same seed, same sample, reproducible reports). Use `--full` for an exact run; cost is O(queried × n × dim).
 
+## Case study — model swap over a real code index
+
+371 chunks (~12k lines of real Python/Swift code), same chunks embedded with `bge-small-en-v1.5` vs `all-MiniLM-L6-v2`:
+
+- mean neighbor Jaccard **0.33**; **42.6%** of chunks lost ≥ 70% of their top-10 neighbors
+- loss concentrated by directory (e.g. 32/50 chunks in one Swift core module, 22/59 in vecdiff itself) — the spot-check list for cutover
+- N2/N4 confirmed both pipelines mechanically healthy (no scaling bug, no duplicates); gate exit **2** = do not cut over blind
+
+Full story + reproducible commands: [docs/case_study](docs/case_study/README.md). Dogfooding this run also fixed a real tool bug (N2 now skips its norm-outlier check for pre-normalized embedders, with the reason inline).
+
 ## Snapshot formats
 
 A *snapshot* is a model-agnostic dump: chunk ids + float32 vectors + metadata (`model`, `dim`, `chunk_paths`, `created_at`). Loading validates the dump strictly and rejects duplicate ids, dimension/length mismatches, and non-finite (NaN/inf) vectors — a poisoned row would make cosine top-k silently arbitrary, so it fails at load instead of mid-report.

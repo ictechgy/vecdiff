@@ -1,0 +1,488 @@
+{
+  "tool": "vecdiff",
+  "version": "0.1.0",
+  "snapshots": {
+    "a": {
+      "path": "A.jsonl",
+      "adapter": "jsonl",
+      "model": "BAAI/bge-small-en-v1.5",
+      "dim": 384,
+      "n": 371,
+      "created_at": "2026-09-05T15:28:57+00:00",
+      "notes": [
+        "jsonl adapter: model/created_at come from the optional sidecar <name>.meta.json (defaults: model 'unknown')."
+      ]
+    },
+    "b": {
+      "path": "B.jsonl",
+      "adapter": "jsonl",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "dim": 384,
+      "n": 371,
+      "created_at": "2026-09-05T15:28:57+00:00",
+      "notes": [
+        "jsonl adapter: model/created_at come from the optional sidecar <name>.meta.json (defaults: model 'unknown')."
+      ]
+    }
+  },
+  "params": {
+    "k": 10,
+    "sample": 0.2,
+    "full": true,
+    "seed": 0,
+    "dup_threshold": 0.999,
+    "format": "auto"
+  },
+  "shared_ids": 371,
+  "checks": {
+    "N1": {
+      "k_requested": 10,
+      "sample_fraction": null,
+      "seed": 0,
+      "shared_ids": 371,
+      "only_in_a": 0,
+      "only_in_b": 0,
+      "mode": "full",
+      "k_effective": 10,
+      "sampled_ids": 371,
+      "sampled_ids_examples": [
+        "py_corpus_a:epitaph/__init__.py:00001",
+        "py_corpus_a:epitaph/cli.py:00001",
+        "py_corpus_a:epitaph/cli.py:00037",
+        "py_corpus_a:epitaph/cli.py:00073",
+        "py_corpus_a:epitaph/cli.py:00109",
+        "py_corpus_a:epitaph/cli.py:00145",
+        "py_corpus_a:epitaph/cli.py:00181",
+        "py_corpus_a:epitaph/cli.py:00217",
+        "py_corpus_a:epitaph/cli.py:00253",
+        "py_corpus_a:epitaph/cli.py:00289",
+        "py_corpus_a:epitaph/cli.py:00325",
+        "py_corpus_a:epitaph/cli.py:00361",
+        "py_corpus_a:epitaph/cli.py:00397",
+        "py_corpus_a:epitaph/cli.py:00433",
+        "py_corpus_a:epitaph/cli.py:00469",
+        "py_corpus_a:epitaph/detect.py:00001",
+        "py_corpus_a:epitaph/detect.py:00037",
+        "py_corpus_a:epitaph/detect.py:00073",
+        "py_corpus_a:epitaph/detect.py:00109",
+        "py_corpus_a:epitaph/detect.py:00145"
+      ],
+      "mean_jaccard": 0.3292497185122755,
+      "jaccard_percentiles": {
+        "p10": 0.17647058823529413,
+        "p25": 0.25,
+        "p50": 0.3333333333333333,
+        "p75": 0.42857142857142855,
+        "p90": 0.5384615384615384
+      },
+      "degraded_ids_jaccard_lt_0.5": 318,
+      "heavy_loss_count": 158,
+      "heavy_loss_ids": [
+        "py_corpus_a:epitaph/cli.py:00289",
+        "py_corpus_a:epitaph/cli.py:00361",
+        "py_corpus_a:epitaph/detect.py:00109",
+        "py_corpus_a:epitaph/matcher.py:00001",
+        "py_corpus_a:epitaph/mcp.py:00001",
+        "py_corpus_a:epitaph/mcp.py:00073",
+        "py_corpus_a:epitaph/mcp.py:00109",
+        "py_corpus_a:epitaph/schema.py:00001",
+        "py_corpus_a:epitaph/schema.py:00037",
+        "py_corpus_a:epitaph/schema.py:00073",
+        "py_corpus_a:epitaph/schema.py:00109",
+        "py_corpus_a:epitaph/store.py:00073",
+        "py_corpus_b:agent2perfetto/cli.py:00073",
+        "py_corpus_b:agent2perfetto/ir.py:00037",
+        "py_corpus_b:agent2perfetto/ir.py:00073",
+        "py_corpus_b:agent2perfetto/ir.py:00145",
+        "py_corpus_b:agent2perfetto/ir.py:00217",
+        "py_corpus_b:agent2perfetto/ir.py:00253",
+        "py_corpus_b:agent2perfetto/lanes.py:00037",
+        "py_corpus_b:agent2perfetto/parser.py:00001",
+        "py_corpus_b:agent2perfetto/parser.py:00145",
+        "py_corpus_b:agent2perfetto/parser.py:00181",
+        "py_corpus_b:agent2perfetto/parser.py:00253",
+        "py_corpus_b:agent2perfetto/trace.py:00109",
+        "py_corpus_b:agent2perfetto/trace.py:00181",
+        "py_corpus_c:yield_audit/attribute.py:00001",
+        "py_corpus_c:yield_audit/attribute.py:00073",
+        "py_corpus_c:yield_audit/audit.py:00037",
+        "py_corpus_c:yield_audit/audit.py:00073",
+        "py_corpus_c:yield_audit/audit.py:00253",
+        "py_corpus_c:yield_audit/audit.py:00289",
+        "py_corpus_c:yield_audit/audit.py:00361",
+        "py_corpus_c:yield_audit/audit.py:00433",
+        "py_corpus_c:yield_audit/cli.py:00073",
+        "py_corpus_c:yield_audit/cli.py:00109",
+        "py_corpus_c:yield_audit/cli.py:00145",
+        "py_corpus_c:yield_audit/cli.py:00181",
+        "py_corpus_c:yield_audit/cli.py:00217",
+        "py_corpus_c:yield_audit/cohorts.py:00037",
+        "py_corpus_c:yield_audit/events.py:00037",
+        "py_corpus_c:yield_audit/events.py:00073",
+        "py_corpus_c:yield_audit/gitdata.py:00181",
+        "py_corpus_c:yield_audit/lenses/__init__.py:00001",
+        "py_corpus_c:yield_audit/lenses/accepted.py:00037",
+        "py_corpus_c:yield_audit/lenses/cache_locality.py:00001",
+        "py_corpus_c:yield_audit/lenses/cache_locality.py:00109",
+        "py_corpus_c:yield_audit/lenses/retry.py:00001",
+        "py_corpus_c:yield_audit/lenses/retry.py:00037",
+        "py_corpus_c:yield_audit/lenses/survival.py:00037",
+        "py_corpus_c:yield_audit/lenses/survival.py:00109",
+        "py_corpus_c:yield_audit/lenses/verify_gap.py:00073",
+        "py_corpus_c:yield_audit/pricing.py:00109",
+        "py_corpus_c:yield_audit/redact.py:00001",
+        "py_corpus_c:yield_audit/redact.py:00073",
+        "py_corpus_c:yield_audit/redact.py:00109",
+        "py_corpus_c:yield_audit/report.py:00001",
+        "py_corpus_c:yield_audit/report.py:00037",
+        "py_corpus_c:yield_audit/report.py:00073",
+        "py_corpus_c:yield_audit/report.py:00109",
+        "py_corpus_c:yield_audit/report.py:00181",
+        "py_corpus_c:yield_audit/report.py:00217",
+        "py_corpus_c:yield_audit/transcripts/__init__.py:00109",
+        "py_corpus_c:yield_audit/transcripts/base.py:00181",
+        "py_corpus_c:yield_audit/transcripts/claude.py:00037",
+        "py_corpus_c:yield_audit/transcripts/claude.py:00073",
+        "py_corpus_c:yield_audit/transcripts/claude.py:00145",
+        "py_corpus_c:yield_audit/transcripts/codex.py:00037",
+        "py_corpus_c:yield_audit/transcripts/codex.py:00073",
+        "py_corpus_c:yield_audit/transcripts/codex.py:00145",
+        "py_corpus_c:yield_audit/transcripts/codex.py:00181",
+        "py_vecdiff:vecdiff/checks.py:00001",
+        "py_vecdiff:vecdiff/checks.py:00145",
+        "py_vecdiff:vecdiff/checks.py:00253",
+        "py_vecdiff:vecdiff/checks.py:00289",
+        "py_vecdiff:vecdiff/checks.py:00325",
+        "py_vecdiff:vecdiff/checks.py:00361",
+        "py_vecdiff:vecdiff/cli.py:00037",
+        "py_vecdiff:vecdiff/cli.py:00073",
+        "py_vecdiff:vecdiff/cli.py:00145",
+        "py_vecdiff:vecdiff/knn.py:00037",
+        "py_vecdiff:vecdiff/knn.py:00073",
+        "py_vecdiff:vecdiff/report.py:00037",
+        "py_vecdiff:vecdiff/report.py:00073",
+        "py_vecdiff:vecdiff/report.py:00109",
+        "py_vecdiff:vecdiff/report.py:00145",
+        "py_vecdiff:vecdiff/report.py:00217",
+        "py_vecdiff:vecdiff/report.py:00325",
+        "py_vecdiff:vecdiff/snapshot.py:00073",
+        "py_vecdiff:vecdiff/snapshot.py:00109",
+        "py_vecdiff:vecdiff/snapshot.py:00145",
+        "py_vecdiff:vecdiff/snapshot.py:00361",
+        "py_vecdiff:vecdiff/snapshot.py:00469",
+        "swift_corpus_d:BreadcrumbCLI/main.swift:00073",
+        "swift_corpus_d:BreadcrumbCLI/main.swift:00109",
+        "swift_corpus_d:BreadcrumbCLI/main.swift:00181",
+        "swift_corpus_d:BreadcrumbCLI/main.swift:00253",
+        "swift_corpus_d:BreadcrumbCore/ConstantTable.swift:00037",
+        "swift_corpus_d:BreadcrumbCore/ConstantTable.swift:00217",
+        "swift_corpus_d:BreadcrumbCore/Crawler.swift:00109",
+        "swift_corpus_d:BreadcrumbCore/Crawler.swift:00145",
+        "swift_corpus_d:BreadcrumbCore/Crawler.swift:00181",
+        "swift_corpus_d:BreadcrumbCore/Crawler.swift:00469",
+        "swift_corpus_d:BreadcrumbCore/Engine.swift:00109",
+        "swift_corpus_d:BreadcrumbCore/GitDiff.swift:00073",
+        "swift_corpus_d:BreadcrumbCore/Glob.swift:00001",
+        "swift_corpus_d:BreadcrumbCore/Glob.swift:00037",
+        "swift_corpus_d:BreadcrumbCore/Glob.swift:00073",
+        "swift_corpus_d:BreadcrumbCore/Glob.swift:00109",
+        "swift_corpus_d:BreadcrumbCore/MCPEngine.swift:00037",
+        "swift_corpus_d:BreadcrumbCore/MCPEngine.swift:00109",
+        "swift_corpus_d:BreadcrumbCore/MCPEngine.swift:00181",
+        "swift_corpus_d:BreadcrumbCore/MapStore.swift:00001",
+        "swift_corpus_d:BreadcrumbCore/Snapshot.swift:00001",
+        "swift_corpus_d:BreadcrumbCore/Snapshot.swift:00037",
+        "swift_corpus_d:BreadcrumbCore/Snapshot.swift:00073",
+        "swift_corpus_d:BreadcrumbCore/Snapshot.swift:00181",
+        "swift_corpus_d:BreadcrumbCore/TestScanner.swift:00001",
+        "swift_corpus_d:BreadcrumbCore/TestScanner.swift:00037",
+        "swift_corpus_e:CoronerCore/Digest.swift:00001",
+        "swift_corpus_e:CoronerCore/Digest.swift:00037",
+        "swift_corpus_e:CoronerCore/Discovery.swift:00001",
+        "swift_corpus_e:CoronerCore/Discovery.swift:00037",
+        "swift_corpus_e:CoronerCore/MCPEngine.swift:00001",
+        "swift_corpus_e:CoronerCore/MCPEngine.swift:00073",
+        "swift_corpus_e:CoronerCore/MCPEngine.swift:00109",
+        "swift_corpus_e:CoronerCore/MCPEngine.swift:00145",
+        "swift_corpus_e:CoronerCore/MCPEngine.swift:00181",
+        "swift_corpus_e:CoronerCore/Models.swift:00001",
+        "swift_corpus_e:CoronerCore/Models.swift:00037",
+        "swift_corpus_e:CoronerCore/Models.swift:00109",
+        "swift_corpus_e:CoronerCore/Models.swift:00181",
+        "swift_corpus_e:CoronerCore/Parsers.swift:00073",
+        "swift_corpus_e:CoronerCore/Parsers.swift:00109",
+        "swift_corpus_e:CoronerCore/Parsers.swift:00217",
+        "swift_corpus_e:CoronerCore/Parsers.swift:00253",
+        "swift_corpus_e:CoronerCore/Parsers.swift:00289",
+        "swift_corpus_e:CoronerCore/Renderer.swift:00001",
+        "swift_corpus_e:CoronerCore/Store.swift:00001",
+        "swift_corpus_e:CoronerCore/Store.swift:00037",
+        "swift_corpus_e:CoronerCore/Store.swift:00073",
+        "swift_corpus_e:CoronerCore/Store.swift:00217",
+        "swift_corpus_e:CoronerCore/Suspector.swift:00001",
+        "swift_corpus_e:CoronerCore/Suspector.swift:00037",
+        "swift_corpus_e:CoronerCore/Suspector.swift:00073",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00037",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00109",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00145",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00217",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00289",
+        "swift_corpus_e:CoronerCore/Symbolicator.swift:00325",
+        "swift_corpus_e:coroner/main.swift:00001",
+        "swift_corpus_e:coroner/main.swift:00073",
+        "swift_corpus_e:coroner/main.swift:00109",
+        "swift_corpus_e:coroner/main.swift:00145",
+        "swift_corpus_e:coroner/main.swift:00181",
+        "swift_corpus_e:coroner/main.swift:00253",
+        "swift_corpus_e:coroner/main.swift:00289",
+        "swift_corpus_e:coroner/main.swift:00325"
+      ],
+      "heavy_loss_ids_truncated": false,
+      "heavy_loss_fraction": 0.42587601078167114,
+      "rank_inversion": {
+        "mean_abs_delta": 2.433408577878104,
+        "max_abs_delta": 9,
+        "ids_with_inversion_ge_5_fraction": 0.5606469002695418
+      },
+      "heavy_loss_concentration": {
+        "paths_available": true,
+        "by_directory": {
+          "swift_corpus_e/CoronerCore": 32,
+          "py_corpus_c/yield_audit": 27,
+          "py_vecdiff/vecdiff": 22,
+          "swift_corpus_d/BreadcrumbCore": 22,
+          "py_corpus_b/agent2perfetto": 13,
+          "py_corpus_a/epitaph": 12,
+          "py_corpus_c/yield_audit/lenses": 9,
+          "py_corpus_c/yield_audit/transcripts": 9,
+          "swift_corpus_e/coroner": 8,
+          "swift_corpus_d/BreadcrumbCLI": 4
+        }
+      }
+    },
+    "N2": {
+      "a": {
+        "side": "A",
+        "n": 371,
+        "dim": 384,
+        "model": "BAAI/bge-small-en-v1.5",
+        "norm": {
+          "mean": 1.0,
+          "std": 4.2542602329831425e-08,
+          "min": 0.9999998807907104,
+          "max": 1.0000001192092896
+        },
+        "outliers": {
+          "z_threshold": 3.0,
+          "count": 0,
+          "fraction": 0.0,
+          "examples": [],
+          "skipped_reason": "norm variance ~0 (pre-normalized embedder?); z-scores would be float noise"
+        }
+      },
+      "b": {
+        "side": "B",
+        "n": 371,
+        "dim": 384,
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "norm": {
+          "mean": 1.0,
+          "std": 1.694937878937708e-08,
+          "min": 0.9999999403953552,
+          "max": 1.0
+        },
+        "outliers": {
+          "z_threshold": 3.0,
+          "count": 0,
+          "fraction": 0.0,
+          "examples": [],
+          "skipped_reason": "norm variance ~0 (pre-normalized embedder?); z-scores would be float noise"
+        }
+      },
+      "norm_mean_shift": {
+        "relative": 0.0,
+        "mean_a": 1.0,
+        "mean_b": 1.0
+      }
+    },
+    "N4": {
+      "A": {
+        "side": "A",
+        "n": 371,
+        "threshold": 0.999,
+        "pairs": 0,
+        "affected_ids": 0,
+        "examples": [],
+        "examples_truncated": false,
+        "pair_ratio": 0.0
+      },
+      "B": {
+        "side": "B",
+        "n": 371,
+        "threshold": 0.999,
+        "pairs": 0,
+        "affected_ids": 0,
+        "examples": [],
+        "examples_truncated": false,
+        "pair_ratio": 0.0
+      }
+    }
+  },
+  "findings": [
+    {
+      "check": "N1",
+      "severity": "red",
+      "message": "mean neighbor Jaccard 0.33 (k=10, full, n=371; thresholds: green >= 0.9, yellow >= 0.7) — migration regression suspected; inspect heavy-loss ids",
+      "details": {
+        "mean_jaccard": 0.3292497185122755,
+        "mode": "full"
+      }
+    },
+    {
+      "check": "N1",
+      "severity": "red",
+      "message": "158 chunks lost >= 70% of their top-10 neighbors (Jaccard <= 0.3; thresholds: green < 2%, yellow < 10% of queried ids), concentrated in: swift_corpus_e/CoronerCore (32), py_corpus_c/yield_audit (27), py_vecdiff/vecdiff (22)",
+      "details": {
+        "heavy_ids": [
+          "py_corpus_a:epitaph/cli.py:00289",
+          "py_corpus_a:epitaph/cli.py:00361",
+          "py_corpus_a:epitaph/detect.py:00109",
+          "py_corpus_a:epitaph/matcher.py:00001",
+          "py_corpus_a:epitaph/mcp.py:00001",
+          "py_corpus_a:epitaph/mcp.py:00073",
+          "py_corpus_a:epitaph/mcp.py:00109",
+          "py_corpus_a:epitaph/schema.py:00001",
+          "py_corpus_a:epitaph/schema.py:00037",
+          "py_corpus_a:epitaph/schema.py:00073",
+          "py_corpus_a:epitaph/schema.py:00109",
+          "py_corpus_a:epitaph/store.py:00073",
+          "py_corpus_b:agent2perfetto/cli.py:00073",
+          "py_corpus_b:agent2perfetto/ir.py:00037",
+          "py_corpus_b:agent2perfetto/ir.py:00073",
+          "py_corpus_b:agent2perfetto/ir.py:00145",
+          "py_corpus_b:agent2perfetto/ir.py:00217",
+          "py_corpus_b:agent2perfetto/ir.py:00253",
+          "py_corpus_b:agent2perfetto/lanes.py:00037",
+          "py_corpus_b:agent2perfetto/parser.py:00001",
+          "py_corpus_b:agent2perfetto/parser.py:00145",
+          "py_corpus_b:agent2perfetto/parser.py:00181",
+          "py_corpus_b:agent2perfetto/parser.py:00253",
+          "py_corpus_b:agent2perfetto/trace.py:00109",
+          "py_corpus_b:agent2perfetto/trace.py:00181",
+          "py_corpus_c:yield_audit/attribute.py:00001",
+          "py_corpus_c:yield_audit/attribute.py:00073",
+          "py_corpus_c:yield_audit/audit.py:00037",
+          "py_corpus_c:yield_audit/audit.py:00073",
+          "py_corpus_c:yield_audit/audit.py:00253",
+          "py_corpus_c:yield_audit/audit.py:00289",
+          "py_corpus_c:yield_audit/audit.py:00361",
+          "py_corpus_c:yield_audit/audit.py:00433",
+          "py_corpus_c:yield_audit/cli.py:00073",
+          "py_corpus_c:yield_audit/cli.py:00109",
+          "py_corpus_c:yield_audit/cli.py:00145",
+          "py_corpus_c:yield_audit/cli.py:00181",
+          "py_corpus_c:yield_audit/cli.py:00217",
+          "py_corpus_c:yield_audit/cohorts.py:00037",
+          "py_corpus_c:yield_audit/events.py:00037",
+          "py_corpus_c:yield_audit/events.py:00073",
+          "py_corpus_c:yield_audit/gitdata.py:00181",
+          "py_corpus_c:yield_audit/lenses/__init__.py:00001",
+          "py_corpus_c:yield_audit/lenses/accepted.py:00037",
+          "py_corpus_c:yield_audit/lenses/cache_locality.py:00001",
+          "py_corpus_c:yield_audit/lenses/cache_locality.py:00109",
+          "py_corpus_c:yield_audit/lenses/retry.py:00001",
+          "py_corpus_c:yield_audit/lenses/retry.py:00037",
+          "py_corpus_c:yield_audit/lenses/survival.py:00037",
+          "py_corpus_c:yield_audit/lenses/survival.py:00109"
+        ],
+        "concentration": {
+          "paths_available": true,
+          "by_directory": {
+            "swift_corpus_e/CoronerCore": 32,
+            "py_corpus_c/yield_audit": 27,
+            "py_vecdiff/vecdiff": 22,
+            "swift_corpus_d/BreadcrumbCore": 22,
+            "py_corpus_b/agent2perfetto": 13,
+            "py_corpus_a/epitaph": 12,
+            "py_corpus_c/yield_audit/lenses": 9,
+            "py_corpus_c/yield_audit/transcripts": 9,
+            "swift_corpus_e/coroner": 8,
+            "swift_corpus_d/BreadcrumbCLI": 4
+          }
+        }
+      }
+    },
+    {
+      "check": "N2",
+      "severity": "green",
+      "message": "dim consistent across snapshots (dim=384)",
+      "details": {
+        "dim_a": 384,
+        "dim_b": 384
+      }
+    },
+    {
+      "check": "N2",
+      "severity": "green",
+      "message": "A: no extreme-norm outliers (|z| > 3.0) — norm variance ~0 (pre-normalized embedder?); z-scores would be float noise",
+      "details": {}
+    },
+    {
+      "check": "N2",
+      "severity": "green",
+      "message": "B: no extreme-norm outliers (|z| > 3.0) — norm variance ~0 (pre-normalized embedder?); z-scores would be float noise",
+      "details": {}
+    },
+    {
+      "check": "N2",
+      "severity": "green",
+      "message": "norm mean shift A->B 0.0% (A mu=1.000, B mu=1.000; thresholds: green <= 5%, yellow <= 20%) — norm distribution stable",
+      "details": {
+        "relative": 0.0,
+        "mean_a": 1.0,
+        "mean_b": 1.0
+      }
+    },
+    {
+      "check": "N4",
+      "severity": "green",
+      "message": "A: 0 duplicate pair(s) at cosine >= 0.999 (0.00% of 371 vectors; thresholds: green == 0, yellow < 1%, red >= 1%) — no duplicates",
+      "details": {
+        "pairs": 0,
+        "pair_ratio": 0.0,
+        "affected_ids": 0
+      }
+    },
+    {
+      "check": "N4",
+      "severity": "green",
+      "message": "B: 0 duplicate pair(s) at cosine >= 0.999 (0.00% of 371 vectors; thresholds: green == 0, yellow < 1%, red >= 1%) — no duplicates",
+      "details": {
+        "pairs": 0,
+        "pair_ratio": 0.0,
+        "affected_ids": 0
+      }
+    }
+  ],
+  "notes": [
+    "N1 neighbors are exact brute-force cosine over each snapshot's full index (not ANN), computed in blocked matrix multiplications with bounded memory.",
+    "N4 is an exact O(n^2) scan (blocked); for very large indexes budget time accordingly.",
+    "A: jsonl adapter: model/created_at come from the optional sidecar <name>.meta.json (defaults: model 'unknown').",
+    "B: jsonl adapter: model/created_at come from the optional sidecar <name>.meta.json (defaults: model 'unknown')."
+  ],
+  "verdict": {
+    "worst": "red",
+    "counts": {
+      "red": 2,
+      "yellow": 0,
+      "green": 6
+    },
+    "statement": "RED: 2 red, 0 yellow, 6 green finding(s)",
+    "disclaimer": "vecdiff collects evidence for human judgment; it never claims one index or model is better."
+  },
+  "gate": {
+    "enabled": true,
+    "exit_code": 2,
+    "semantics": "2 = any RED, 1 = any YELLOW, 0 = all green"
+  }
+}
