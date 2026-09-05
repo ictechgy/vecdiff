@@ -1,0 +1,43 @@
+name: PyPI
+
+# Trusted publishing (OIDC): the PyPI pending publisher for "vecdiff" is
+# configured for owner=ictechgy repo=vecdiff workflow=pypi.yml. No API token
+# is stored anywhere. If you entered an environment name in the PyPI pending
+# publisher form, uncomment `environment:` below (and create it in the repo
+# settings) — a mismatch between the two sides makes OIDC auth fail.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e . pytest
+      - run: pytest -q                       # never ship a red build
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build                        # sdist + wheel (release flow)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # environment: pypi
+    permissions:
+      id-token: write                        # OIDC trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true

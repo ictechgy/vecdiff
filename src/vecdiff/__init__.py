@@ -7,6 +7,6 @@ findings: neighbor stability (N1), population stats (N2), duplicates (N4).
 Fully local, zero network at runtime, deterministic, numpy-only.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["__version__"]
