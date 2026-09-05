@@ -1,8 +1,11 @@
 # HANDOFF — what the next session should do
 
-State at writing: v0.1.0, 3 commits, 49/49 tests green, clean tree, **no remote, not on PyPI**.
+State at writing: v0.1.x, 8 commits, 75/75 tests green, clean tree,
+**public at https://github.com/ictechgy/vecdiff (CI green on 3.10 + 3.13), not on PyPI**.
 Read `AGENTS.md` first (invariants, judgment discipline, test gotchas). (The original
-Korean planning doc lives outside the repo — local `기획서.md`, gitignored.)
+Korean planning doc lives outside the repo — local `기획서.md`, gitignored; it was
+stripped from history with `git filter-repo` before going public, backup bundle at
+`/tmp/vecdiff-pre-filter.bundle`.)
 
 ## 1. Do first — dogfood and capture the launch story
 
@@ -18,7 +21,10 @@ Korean planning doc lives outside the repo — local `기획서.md`, gitignored.
 
 ## 2. Ship it
 
-- [ ] GitHub repo + push; CI (`.github/workflows/ci.yml`) has never run — confirm green.
+- [x] **GitHub repo + push — done 2026-09-06.** Public at
+      https://github.com/ictechgy/vecdiff; CI green on 3.10 + 3.13. The first
+      real Linux run caught one latent test bug (float32/BLAS boundary assert —
+      see the "exact float boundary" gotcha in AGENTS.md); fixed.
 - [ ] PyPI publish: `vecdiff` name probed clean in 2026-09-05 search (only a SignumData
       library function and a Rust `VecDiff` enum — no CLI tool), but re-check
       pypi.org before upload. Keep `uv build` in the release flow (verified working).
