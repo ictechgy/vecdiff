@@ -46,7 +46,7 @@ You get console findings plus `report.md`, and `--gate` turns them into an exit 
 | **N4** | Duplicates | Re-chunking accidents and boilerplate floods: within-index pairs at cosine ≥ threshold |
 | **N5** | Constant vectors | Pipeline bugs (cached API response, constant fallback, broken batch): one bit-identical embedding reused across many chunk ids |
 | **Q1** (`--queries-a/b`) | Canonical queries (supervised) | What real retrieval traffic would see: the same query set run through both indexes, per-query top-k overlap + rank inversions |
-| **N3** (`--paths-manifest`) | Orphans | Rot: chunks whose source file no longer exists at audit time |
+| **N3** (`--paths-manifest`) | Orphans + ghosts | Rot: chunks whose source file no longer exists; with a symbol-graph manifest (e.g. [cartograph](https://github.com/ictechgy/cartograph) for Swift), chunks whose file survives but whose declared symbols are gone |
 
 Roadmap: **N3** orphan/ghost chunks audited against a symbol graph (iOS IndexStoreDB / Kotlin), canonical-query supervised comparison, time-series rot monitoring.
 
@@ -66,7 +66,7 @@ The N2 outlier check is skipped (reported green, with the reason inline) when no
 | N5 largest bit-identical group | < 5 members | ≥ 5 members | ≥ 5% of index |
 | Q1 mean query Jaccard | ≥ 0.90 | ≥ 0.70 | < 0.70 |
 | Q1 heavy-loss queries (Jaccard ≤ 0.30) | < 2% | < 10% | ≥ 10% |
-| N3 orphan chunks / n | 0 | < 5% | ≥ 5% |
+| N3 rot chunks (orphans + ghosts) / n | 0 | < 5% | ≥ 5% |
 
 `--gate` exit codes: `0` all green, `1` any yellow, `2` any red. (Note: argparse usage errors — a mistyped flag — also exit 2; check stderr to tell them apart from a red verdict. Hard errors — unreadable snapshot, dimension mismatch — exit 3.)
 
@@ -91,7 +91,7 @@ A *snapshot* is a model-agnostic dump: chunk ids + float32 vectors + metadata (`
 | Adapter | Input | Notes |
 |---|---|---|
 | `native` (built-in) | directory with `vectors.npy` + `meta.json`, or a single self-describing `.npz` | the interchange format — export once, diff forever |
-| `jsonl` (built-in) | `.jsonl` / `.ndjson` (optionally `.gz`): `{"id", "vector", "path"?}` per line; optional `<stem>.meta.json` sidecar | the universal escape hatch — any vector DB can dump this in a few lines of client code |
+| `jsonl` (built-in) | `.jsonl` / `.ndjson` (optionally `.gz`): `{"id", "vector", "path"?, "symbols"?}` per line; optional `<stem>.meta.json` sidecar | the universal escape hatch — any vector DB can dump this in a few lines of client code |
 | `sqlite` (built-in) | `chunks(id TEXT PRIMARY KEY, vec BLOB)` float32 little-endian; optional `meta(key, value)` table | stdlib only |
 | `faiss` (optional) | `.index` / `.faiss` | requires `pip install faiss-cpu`; only flat-style indexes whose vectors can be reconstructed |
 

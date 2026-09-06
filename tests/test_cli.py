@@ -222,5 +222,34 @@ def test_cli_paths_manifest_orphans(tmp_path, capsys):
     code = main([str(a), str(a), "--paths-manifest", str(manifest), "--gate"])
     assert code == 2
     out = capsys.readouterr().out
-    assert "N3 orphan chunks" in out
+    assert "N3 rot audit" in out
     assert "orphan" in out
+
+
+def test_cli_jsonl_symbol_manifest_ghosts(tmp_path, capsys):
+    import numpy as np
+    from vecdiff.snapshot import snapshot_from_arrays, write_native_snapshot
+
+    rng = np.random.default_rng(71)
+    ids = make_ids(4)
+    v = rng.standard_normal((4, 8)).astype(np.float32)
+    write_native_snapshot(
+        tmp_path / "a", ids=ids, vectors=v, model="m",
+        chunk_paths=["src/a.py", "src/a.py", "src/b.py", "src/b.py"],
+    )
+    write_native_snapshot(
+        tmp_path / "b", ids=ids, vectors=v.copy(), model="m",
+        chunk_paths=["src/a.py", "src/a.py", "src/b.py", "src/b.py"],
+    )
+    # jsonl manifest: b.py no longer exists (orphan); a.py alive but A.g dead
+    manifest = tmp_path / "tree.jsonl"
+    manifest.write_text(
+        json.dumps({"path": "src/a.py", "symbols": ["A.f", "A.h"]}) + "\n",
+        encoding="utf-8",
+    )
+    code = main([str(tmp_path / "a"), str(tmp_path / "b"),
+                 "--paths-manifest", str(manifest), "--gate"])
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "N3 rot audit" in out
+    assert "ghost" in out

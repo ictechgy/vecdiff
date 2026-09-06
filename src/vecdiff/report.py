@@ -228,13 +228,15 @@ def render_console(rep: dict) -> str:
 
     if "N3" in rep["checks"]:
         lines.append("")
-        lines.append("N3 orphan chunks (vs paths manifest)")
+        lines.append("N3 rot audit (vs paths manifest)")
         for side_stats in rep["checks"]["N3"].values():
-            if "orphan_fraction" in side_stats:
+            if "rot_fraction" in side_stats:
+                level = "symbol-level" if side_stats.get("symbol_level") else "file-level"
                 lines.append(
-                    f"  {side_stats['side']}: {side_stats['orphans']} orphan(s) "
-                    f"({side_stats['orphan_fraction']:.1%} of {side_stats['n']}, "
-                    f"manifest {side_stats['manifest_paths']} paths)"
+                    f"  {side_stats['side']}: {side_stats['orphans']} orphan(s), "
+                    f"{side_stats.get('ghosts', 0)} ghost(s) "
+                    f"({side_stats['rot_fraction']:.1%} of {side_stats['n']}, "
+                    f"{level}, manifest {side_stats['manifest_paths']} paths)"
                 )
             else:
                 lines.append(f"  {side_stats['side']}: skipped (no path metadata)")
@@ -411,15 +413,16 @@ def render_markdown(rep: dict) -> str:
 
     if "N3" in rep["checks"]:
         out.append("")
-        out.append("### N3 orphan chunks (vs paths manifest)")
+        out.append("### N3 rot audit (vs paths manifest)")
         out.append("")
-        out.append("| side | orphans | fraction | manifest paths |")
-        out.append("|---|---|---|---|")
+        out.append("| side | orphans | ghosts | rot fraction | manifest paths |")
+        out.append("|---|---|---|---|---|")
         for side_stats in rep["checks"]["N3"].values():
-            if "orphan_fraction" in side_stats:
+            if "rot_fraction" in side_stats:
                 out.append(
                     f"| {side_stats['side']} | {side_stats['orphans']} | "
-                    f"{side_stats['orphan_fraction']:.1%} | "
+                    f"{side_stats.get('ghosts', 0)} | "
+                    f"{side_stats['rot_fraction']:.1%} | "
                     f"{side_stats['manifest_paths']} |"
                 )
 

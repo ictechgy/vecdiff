@@ -466,7 +466,7 @@ def test_n3_orphans_graded():
     keep = set(snap.paths[10:])  # drop 10 paths -> 10% orphans -> red
     stats, findings = checks.check_orphans(snap, "A", keep)
     assert stats["orphans"] == 10
-    assert stats["orphan_fraction"] == pytest.approx(0.10)
+    assert stats["rot_fraction"] == pytest.approx(0.10)
     assert findings[0].severity == "red"
     keep2 = set(snap.paths[1:])  # 1% -> yellow (nonzero but < 5%)
     _, f2 = checks.check_orphans(snap, "A", keep2)
@@ -484,3 +484,52 @@ def test_n3_no_path_metadata_yellow():
     stats, findings = checks.check_orphans(snap, "A", {"src/x.py"})
     assert findings[0].severity == "yellow"
     assert "no chunk_paths" in findings[0].message
+
+
+def test_n3_ghost_symbols_detected():
+    from vecdiff.snapshot import snapshot_from_arrays
+
+    ids = make_ids(4)
+    snap = snapshot_from_arrays(
+        ids=ids, vectors=_base(4, 8), model="m",
+        chunk_paths=["src/a.py", "src/a.py", "src/b.py", "src/b.py"],
+        chunk_symbols=[["A.f", "A.g"], ["A.h"], ["B.f"], ["B.g", "B.h"]],
+    )
+    manifest_paths = {"src/a.py", "src/b.py"}
+    live = {"src/a.py": {"A.f", "A.g", "A.h"}, "src/b.py": {"B.f", "B.g"}}
+    # chunk 4 declares B.h which is dead -> 1 ghost, no orphans; 25% >= 5% -> red
+    stats, findings = checks.check_orphans(snap, "A", manifest_paths, live)
+    assert stats["symbol_level"] is True
+    assert stats["orphans"] == 0
+    assert stats["ghosts"] == 1
+    assert stats["rot_fraction"] == 0.25
+    assert findings[0].severity == "red"
+    assert findings[0].details["ghost_examples"][0]["dead_symbols"] == ["B.h"]
+
+
+def test_n3_ghost_clean_when_all_symbols_live():
+    from vecdiff.snapshot import snapshot_from_arrays
+
+    ids = make_ids(3)
+    snap = snapshot_from_arrays(
+        ids=ids, vectors=_base(3, 8), model="m",
+        chunk_paths=["src/a.py"] * 3,
+        chunk_symbols=[["A.f"], ["A.g"], ["A.h"]],
+    )
+    live = {"src/a.py": {"A.f", "A.g", "A.h", "A.extra"}}
+    stats, findings = checks.check_orphans(snap, "A", {"src/a.py"}, live)
+    assert stats["ghosts"] == 0
+    assert findings[0].severity == "green"
+    assert "symbol-level" in findings[0].message
+
+
+def test_n3_symbol_manifest_without_chunk_symbols_stays_file_level():
+    # jsonl manifest with symbols, but snapshot lacks chunk symbols ->
+    # file-level only, no ghosts, honest note
+    snap = make_snapshot(make_ids(2), _base(2, 8), paths=["src/a.py", "src/a.py"])
+    live = {"src/a.py": {"A.f"}}
+    stats, findings = checks.check_orphans(snap, "A", {"src/a.py"}, live)
+    assert stats["symbol_level"] is False
+    assert stats["ghosts"] == 0
+    assert findings[0].severity == "green"
+    assert "file-level" in findings[0].message

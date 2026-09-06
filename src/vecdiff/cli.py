@@ -88,9 +88,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--paths-manifest",
         metavar="FILE",
-        help="N3 rot audit: newline-separated source paths that currently "
-        "exist (e.g. `find src -type f`); chunks whose path is absent are "
-        "orphans",
+        help="N3 rot audit: newline-separated existing source paths "
+        "(file-level), or a .jsonl manifest of {path, symbols?} records "
+        "from a symbol-graph extractor (symbol-level ghost detection when "
+        "chunks carry 'symbols' metadata)",
     )
     p.add_argument(
         "--gate",
@@ -173,15 +174,56 @@ def main(argv: list[str] | None = None) -> int:
                 raise SnapshotError(
                     f"could not read paths manifest '{args.paths_manifest}': {exc}"
                 ) from exc
-            existing = {
-                line.strip()
-                for line in manifest_text.splitlines()
-                if line.strip() and not line.startswith("#")
-            }
-            n3_a_stats, n3_a_findings = checks.check_orphans(snap_a, "A", existing)
-            n3_b_stats, n3_b_findings = checks.check_orphans(snap_b, "B", existing)
+            existing: set[str] = set()
+            live_symbols: dict[str, set[str]] = {}
+            if args.paths_manifest.endswith(".jsonl"):
+                import json as _json
+
+                for lineno, line in enumerate(
+                    manifest_text.splitlines(), start=1
+                ):
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    try:
+                        rec = _json.loads(line)
+                    except _json.JSONDecodeError as exc:
+                        raise SnapshotError(
+                            f"paths manifest '{args.paths_manifest}': line "
+                            f"{lineno} is not valid JSON: {exc}"
+                        ) from exc
+                    if not isinstance(rec, dict) or "path" not in rec:
+                        raise SnapshotError(
+                            f"paths manifest '{args.paths_manifest}': line "
+                            f"{lineno} must be an object with key 'path' "
+                            "(and optionally 'symbols')"
+                        )
+                    existing.add(str(rec["path"]))
+                    if isinstance(rec.get("symbols"), list):
+                        live_symbols[str(rec["path"])] = {
+                            str(x) for x in rec["symbols"]
+                        }
+            else:
+                existing = {
+                    line.strip()
+                    for line in manifest_text.splitlines()
+                    if line.strip() and not line.startswith("#")
+                }
+            live = live_symbols or None
+            n3_a_stats, n3_a_findings = checks.check_orphans(
+                snap_a, "A", existing, live
+            )
+            n3_b_stats, n3_b_findings = checks.check_orphans(
+                snap_b, "B", existing, live
+            )
             n3_stats = {"A": n3_a_stats, "B": n3_b_stats}
             findings += n3_a_findings + n3_b_findings
+            if live is not None:
+                notes.append(
+                    "N3 ran symbol-level (jsonl manifest with 'symbols'); "
+                    "chunk symbols and manifest symbols must share one naming "
+                    "convention (e.g. cartograph usr or qualifiedName)."
+                )
 
         if not args.full and n1_stats.get("mode") == "sampled":
             notes.append(

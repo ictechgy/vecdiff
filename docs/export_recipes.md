@@ -155,15 +155,63 @@ each side's snapshot — embed each side's queries with that side's model.
 
 ## Paths manifest for N3 (rot audit)
 
-N3 finds chunks whose source file no longer exists. The manifest is just the
-current file list — paths are the join key:
+N3 grades rot at two levels, one interface — paths are the join key:
+
+**File-level** (plain text manifest — which files exist):
 
 ```bash
 git ls-files > tree.txt        # or: find src -type f | sort > tree.txt
 vecdiff A.jsonl B.jsonl --paths-manifest tree.txt --gate
 ```
 
-Paths normalize POSIX-style (`./src/x.py` matches `src/x.py`), `#` comments
-are ignored. Symbol-level ghost detection (iOS IndexStoreDB / Kotlin symbol
-extraction) is designed to plug into this same interface later: emit a
-richer manifest and the check stays compatible.
+**Symbol-level** (jsonl manifest — which symbols live in each file), for
+ghost chunks whose file survives but whose declared symbols are gone.
+Chunks must carry their `symbols` at export time (the chunker knows which
+declarations a chunk covers):
+
+```jsonl
+{"id": "app:Login.swift:00001", "vector": [...], "path": "App/Login.swift", "symbols": ["App.LoginView", "App.LoginView.body"]}
+```
+
+```bash
+vecdiff A.jsonl B.jsonl --paths-manifest symbols.jsonl --gate
+```
+
+Naming convention must match between chunk `symbols` and manifest
+`symbols` — use whatever your extractor emits (qualifiedName, USR, ...).
+
+### From cartograph (Swift / iOS)
+
+[cartograph](https://github.com/ictechgy/cartograph) reads the index store
+Xcode/SwiftPM already produces; `cartograph graph --format json` emits a
+GraphDocument whose nodes carry `usr` and `location.path`. Convert it to an
+N3 manifest with stdlib json:
+
+```python
+import json, sys
+from collections import defaultdict
+
+doc = json.load(open("graph.json"))
+live = defaultdict(set)
+for node in doc["nodes"]:
+    loc = node.get("location") or {}
+    path, usr = loc.get("path"), node.get("usr")
+    if path and usr and not node.get("isExternal"):
+        live[path].add(usr)          # or node["name"] for qualified names
+with open("symbols.jsonl", "w") as f:
+    for path, syms in sorted(live.items()):
+        f.write(json.dumps({"path": path, "symbols": sorted(syms)}) + "\n")
+```
+
+Run cartograph on a fresh build so the index store reflects the current
+tree (`swift build` writes `.build/index/store`; Xcode needs
+`COMPILER_INDEX_STORE_ENABLE=YES`).
+
+### From kartograph (Kotlin / Android)
+
+[kartograph](https://github.com/ictechgy/kartograph) builds its graph from
+compiled classes, but its graph renderers deliberately omit local source
+paths and ship no JSON graph format yet — so today it cannot feed the
+symbol-level manifest. Use the file-level manifest for Android
+(`git ls-files '*.kt' > tree.txt`) until kartograph grows a JSON graph
+export with opt-in paths; the vecdiff side of the interface is ready.

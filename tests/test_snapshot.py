@@ -571,3 +571,37 @@ def test_sqlite_path_with_special_characters(tmp_path):
     con.close()
     snap = load_snapshot(d / "snap.db")
     assert snap.n == 4
+
+
+def test_jsonl_symbols_round_trip(tmp_path, rng):
+    vecs = rng.standard_normal((3, 4)).astype(np.float32)
+    _write_jsonl(
+        tmp_path / "s.jsonl",
+        [
+            {"id": "a", "vector": vecs[0].tolist(), "path": "src/a.py",
+             "symbols": ["A.f", "A.g"]},
+            {"id": "b", "vector": vecs[1].tolist(), "path": "src/a.py",
+             "symbols": []},
+            {"id": "c", "vector": vecs[2].tolist(), "path": "src/b.py",
+             "symbols": ["B.h"]},
+        ],
+    )
+    snap = load_snapshot(tmp_path / "s.jsonl")
+    assert snap.symbols == [["A.f", "A.g"], [], ["B.h"]]
+
+
+def test_jsonl_bad_symbols_rejected(tmp_path, rng):
+    _write_jsonl(
+        tmp_path / "bad.jsonl",
+        [{"id": "a", "vector": [1.0, 2.0], "symbols": ["ok", 42]}],
+    )
+    with pytest.raises(SnapshotError, match="'symbols' must be"):
+        load_snapshot(tmp_path / "bad.jsonl")
+
+
+def test_snapshot_without_symbols_field_is_none(tmp_path, rng):
+    _write_jsonl(
+        tmp_path / "s.jsonl",
+        [{"id": "a", "vector": [1.0, 2.0]}],
+    )
+    assert load_snapshot(tmp_path / "s.jsonl").symbols is None

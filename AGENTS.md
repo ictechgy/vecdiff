@@ -52,7 +52,7 @@ vecdiff /tmp/vecdemo/snapA /tmp/vecdemo/snapB --full --json r.json --markdown r.
   concatenate raw paths into `file:` URIs (a `?` or `#` in the path silently opens an
   empty database; regression-tested).
 - **jsonl adapter** is the universal any-vector-DB path (stdlib `json`/`gzip` only):
-  one `{"id", "vector", "path"?}` object per line; sidecar meta is
+  one `{"id", "vector", "path"?, "symbols"?}` object per line; sidecar meta is
   `<stem-without-.jsonl/.ndjson/.gz>.meta.json` — `snap.jsonl`, `snap.ndjson` and
   `snap.jsonl.gz` all resolve to `snap.meta.json` (tested contract, keep it).
   Rows convert to float32 in `JSONL_CHUNK_ROWS`-sized chunks — never accumulate the

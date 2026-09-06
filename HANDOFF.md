@@ -71,11 +71,17 @@ green on 3.10 + 3.13
       (newline-separated existing source paths) + `check_orphans` grade
       chunks whose path vanished (0 / <5% / >=5% thresholds). The
       Snapshot<->symbol-graph join is paths, as specified.
-- [ ] **N3 symbol-level ghosts**: IndexStoreDB (iOS) / Kotlin symbol
-      extraction emitting a *richer* manifest (path -> surviving symbols) so
-      "file exists but all its symbols moved" also counts as rot. The check
-      interface is ready; the extractor is user-side tooling (never a
-      vecdiff dependency).
+- [x] **N3 symbol-level ghosts — landed 2026-09-06 (iOS path).** jsonl
+      snapshots may carry per-chunk `symbols` (join key alongside `path`);
+      `--paths-manifest` accepts a jsonl `{path, symbols}` manifest;
+      `check_orphans` flags ghost chunks (file alive, declared symbols
+      gone) in the same 0 / <5% / >=5% bands. Extractor recipes:
+      **cartograph** (Swift/iOS) `graph --format json` converts directly
+      (usr + location.path verified in its source); **kartograph**
+      (Kotlin/Android) cannot yet — its graph renderers deliberately omit
+      local paths and ship no JSON graph format, so Android stays
+      file-level (`git ls-files '*.kt'`) until kartograph grows a JSON
+      export with opt-in paths (upstream ask; it is also ictechgy's).
 
 ## 5. Known debts / honesty notes
 

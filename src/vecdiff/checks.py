@@ -871,23 +871,33 @@ def check_orphans(
     snap: Snapshot,
     side: str,
     existing_paths: set[str],
+    live_symbols: dict[str, set[str]] | None = None,
 ) -> tuple[dict, list[Finding]]:
-    """Chunks whose source path is absent from the current-tree manifest.
+    """Rot audit: orphan chunks (source path gone) and ghost chunks (path
+    exists but some of the chunk's declared symbols are gone).
 
     The manifest is the Snapshot<->symbol-graph join interface (paths are
-    the join key): today it is a plain list of existing source paths —
-    `find src -type f` is enough. Symbol-level ghost detection (IndexStoreDB
-    / Kotlin symbol extraction) plugs into the same interface later by
-    producing a richer manifest.
+    the join key). Two levels, same interface:
+
+    * plain text manifest — one existing source path per line (file-level);
+    * jsonl manifest — ``{"path", "symbols"}`` records from a symbol-graph
+      extractor (cartograph for Swift/iOS emits ``graph --format json`` with
+      per-symbol ``location.path`` + ``usr``). Chunks that carry a
+      ``symbols`` list are then checked symbol-level: a chunk whose symbols
+      disappeared while its file survives is a *ghost* — invisible to the
+      file-level check.
     """
     stats: dict = {
         "side": side,
         "n": snap.n,
         "manifest_paths": len(existing_paths),
         "with_path_metadata": 0,
+        "symbol_level": bool(live_symbols) and snap.symbols is not None,
         "orphans": 0,
-        "orphan_fraction": 0.0,
+        "ghosts": 0,
+        "rot_fraction": 0.0,
         "examples": [],
+        "ghost_examples": [],
     }
     findings: list[Finding] = []
     if snap.paths is None:
@@ -908,31 +918,72 @@ def check_orphans(
         return posixpath.normpath(p.replace("\\", "/"))
 
     existing = {norm(x) for x in existing_paths}
+    live: dict[str, set[str]] = (
+        {norm(k): set(v) for k, v in (live_symbols or {}).items()}
+        if live_symbols
+        else {}
+    )
+    use_symbols = live and snap.symbols is not None
+
     orphans: list[str] = []
-    for cid, raw in zip(snap.ids, snap.paths):
+    ghosts: list[tuple[str, str, list[str]]] = []  # (id, path, dead symbols)
+    for pos, (cid, raw) in enumerate(zip(snap.ids, snap.paths)):
         stats["with_path_metadata"] += 1
-        if norm(raw) not in existing:
+        path = norm(raw)
+        if path not in existing:
             orphans.append(cid)
-    frac = len(orphans) / snap.n if snap.n else 0.0
+            continue
+        if use_symbols:
+            declared = snap.symbols[pos]
+            if not declared:
+                continue
+            dead = sorted(set(declared) - live.get(path, set()))
+            if dead:
+                ghosts.append((cid, raw, dead))
+
+    rot = len(orphans) + len(ghosts)
+    frac = rot / snap.n if snap.n else 0.0
     stats["orphans"] = len(orphans)
-    stats["orphan_fraction"] = frac
+    stats["ghosts"] = len(ghosts)
+    stats["rot_fraction"] = frac
     stats["examples"] = orphans[:50]
-    if not orphans:
+    stats["ghost_examples"] = [
+        {"id": cid, "path": path, "dead_symbols": dead[:5]}
+        for cid, path, dead in ghosts[:50]
+    ]
+    if rot == 0:
         sev = "green"
         message = (
-            f"{side}: no orphan chunks (all {snap.n} chunk paths exist in the "
-            f"manifest of {len(existing)} paths)"
+            f"{side}: no rot — all {snap.n} chunk paths exist"
+            + (
+                " and all declared symbols are live "
+                f"({len(existing)} manifest paths, symbol-level)"
+                if use_symbols
+                else f" (file-level, {len(existing)} manifest paths)"
+            )
         )
     else:
         if frac >= N3_ORPHAN_YELLOW:
             sev = "red"
         else:
             sev = "yellow"
-        sample = [snap.paths[snap.ids.index(cid)] for cid in orphans[:3]]
+        parts = []
+        if orphans:
+            parts.append(
+                f"{len(orphans)} orphan chunk(s) (path gone), e.g. "
+                f"{[snap.paths[snap.ids.index(c)] for c in orphans[:3]]}"
+            )
+        if ghosts:
+            g = ghosts[0]
+            parts.append(
+                f"{len(ghosts)} ghost chunk(s) (file alive, symbols gone), "
+                f"e.g. {g[0]} lost {g[2][:3]}"
+            )
         message = (
-            f"{side}: {len(orphans)} orphan chunk(s) — source path no longer "
-            f"exists ({frac:.1%} of {snap.n}; thresholds: green == 0, yellow < "
-            f"{N3_ORPHAN_YELLOW:.0%}), e.g. {sample}"
+            f"{side}: {parts[0]}"
+            + (f"; {parts[1]}" if len(parts) > 1 else "")
+            + f" — {frac:.1%} of {snap.n} (thresholds: green == 0, yellow < "
+            f"{N3_ORPHAN_YELLOW:.0%})"
         )
     findings.append(Finding(check="N3", severity=sev, message=message, details=stats))
     return stats, findings

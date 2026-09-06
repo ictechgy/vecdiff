@@ -71,6 +71,7 @@ class Snapshot:
     created_at: str | None
     source: str  # filesystem path this was loaded from
     adapter: str  # "native" | "jsonl" | "sqlite" | "faiss" | "memory"
+    symbols: list[list[str]] | None = None  # per-chunk declared symbols (N3 ghost join)
     notes: list[str] = field(default_factory=list)  # honest provenance notes
     _unit: np.ndarray | None = field(default=None, repr=False, compare=False)
 
@@ -202,6 +203,7 @@ def snapshot_from_arrays(
     vectors: np.ndarray,
     model: str,
     chunk_paths: list[str] | None = None,
+    chunk_symbols: list[list[str]] | None = None,
     created_at: str | None = None,
     source: str = "<in-memory>",
 ) -> Snapshot:
@@ -225,6 +227,8 @@ def snapshot_from_arrays(
     }
     if chunk_paths is not None:
         meta["chunk_paths"] = [str(x) for x in chunk_paths]
+    if chunk_symbols is not None:
+        meta["symbols"] = [list(g) for g in chunk_symbols]
     if created_at is not None:
         meta["created_at"] = str(created_at)
     return _build_snapshot(meta, arrays, source=source, adapter="memory")
@@ -349,6 +353,7 @@ def _load_jsonl(p: Path) -> Snapshot:
 
     ids: list[str] = []
     paths: list[str] = []
+    symbols: list[list[str]] = []
     chunks: list[np.ndarray] = []
     buf: list[list[float]] = []
     dim = 0
@@ -398,6 +403,15 @@ def _load_jsonl(p: Path) -> Snapshot:
                     raise SnapshotError(
                         f"jsonl snapshot '{p}': line {lineno} 'path' must be a string"
                     )
+                syms = obj.get("symbols")
+                if syms is not None and (
+                    not isinstance(syms, list)
+                    or not all(isinstance(x, str) for x in syms)
+                ):
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'symbols' must be "
+                        "a list of strings"
+                    )
                 row = [float(x) for x in vec]
                 if dim == 0:
                     dim = len(row)
@@ -409,6 +423,7 @@ def _load_jsonl(p: Path) -> Snapshot:
                 ids.append(obj["id"])
                 buf.append(row)
                 paths.append(path if path is not None else "")
+                symbols.append(list(syms) if syms is not None else [])
                 if len(buf) >= JSONL_CHUNK_ROWS:
                     chunks.append(np.asarray(buf, dtype=np.float32))
                     buf.clear()
@@ -448,6 +463,8 @@ def _load_jsonl(p: Path) -> Snapshot:
             "jsonl adapter: no 'path' fields found; N1 path concentration "
             "will be unavailable."
         )
+    if any(symbols):
+        built_meta["symbols"] = symbols
     snap = _build_snapshot(
         built_meta, vectors, source=str(p), adapter="jsonl"
     )
@@ -726,6 +743,23 @@ def _build_snapshot(
             )
         paths = list(raw_paths)
 
+    symbols: list[list[str]] | None = None
+    raw_symbols = meta.get("symbols")
+    if raw_symbols is not None:
+        if not isinstance(raw_symbols, list) or not all(
+            isinstance(group, list) and all(isinstance(x, str) for x in group)
+            for group in raw_symbols
+        ):
+            raise SnapshotError(
+                f"'symbols' must be a list of lists of strings ({source})"
+            )
+        if len(raw_symbols) != len(ids):
+            raise SnapshotError(
+                f"'symbols' has {len(raw_symbols)} entries but there are "
+                f"{len(ids)} ids ({source})"
+            )
+        symbols = [list(group) for group in raw_symbols]
+
     created_at = meta.get("created_at")
     if created_at is not None and not isinstance(created_at, str):
         created_at = str(created_at)
@@ -742,6 +776,7 @@ def _build_snapshot(
         created_at=created_at,
         source=source,
         adapter=adapter,
+        symbols=symbols,
         notes=notes,
     )
 
