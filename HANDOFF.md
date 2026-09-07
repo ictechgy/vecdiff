@@ -1,104 +1,110 @@
 # HANDOFF — what the next session should do
 
-State at writing: v0.3.0 **published on PyPI** (N5 + Q1 + N3;
-https://github.com/ictechgy/vecdiff/releases/tag/v0.3.0), 15 commits,
-96/96 tests green (+1 intended skip), clean tree, repo public with CI
-green on 3.10 + 3.13
+Read `AGENTS.md` first (layout, invariants, judgment discipline, test gotchas).
 
-## 1. Do first — dogfood and capture the launch story
+**State at writing (2026-09-06):** main = `0.4.0.dev0` (19 commits, clean
+tree, 104 tests: 103 green + 1 intended skip¹). **PyPI has 0.2.0 and 0.3.0**
+(pypi.org/project/vecdiff); repo public at
+https://github.com/ictechgy/vecdiff, CI green on 3.10 + 3.13.
+The full v0.1–v0.3 roadmap from the original planning doc is shipped; what
+remains is below, ordered.
 
-- [x] **Case study captured 2026-09-06.** The maintainer's private
-      code-search pipeline was not present on this machine, so the case study
-      was built from ~12k lines of real local code (six projects, five
-      anonymized) × two real models (bge-small-en-v1.5 vs all-MiniLM-L6-v2,
-      371 stable chunk ids), exported via the jsonl adapter:
-      `docs/case_study/` (README + report.md + report.json + export script).
-      Headline: mean Jaccard 0.33, 42.6% heavy-loss, concentrated by
-      directory, gate exit 2 — framed as evidence for cutover review, not a
-      model ranking. Dogfooding also surfaced and fixed the N2
-      pre-normalized-embedder false positive (norm variance ≈ 0 → outlier
-      check skipped with reason).
-- [ ] (Optional) An additional internal run on the real dev pipeline, if it
-      lives on another machine, would strengthen the story further.
-- [ ] That report becomes the README/launch case study ("N1 flagged X chunks concentrated
-      in src/auth; N4 caught Y re-chunking duplicates") — the launch
-      strategy explicitly calls for one real case, and the re-embedding guide blogs
-      (no diff tool exists) are the natural citation path. **Scrub filesystem paths from
-      the report before publishing** (reports embed absolute paths).
+¹ skip = the faiss graceful-degradation test, which only runs *without*
+faiss installed; the dev venv has `faiss-cpu`, so the integration tests run
+locally and this one skips. In CI (no faiss) the inverse. Both are correct.
 
-## 2. Ship it
+## 1. Do next — in this order
 
-- [x] **GitHub repo + push — done 2026-09-06.** Public at
-      https://github.com/ictechgy/vecdiff; CI green on 3.10 + 3.13. The first
-      real Linux run caught one latent test bug (float32/BLAS boundary assert —
-      see the "exact float boundary" gotcha in AGENTS.md); fixed.
-- [x] **PyPI publish — done 2026-09-06.** Trusted publishing via
-      `.github/workflows/pypi.yml` (tests → `uv build` → OIDC, no tokens in
-      the repo). `vecdiff 0.2.0` is live: https://pypi.org/project/vecdiff/
-      (clean-venv install + `--version` verified). Future releases: bump
-      `__version__`, commit, `git tag vX.Y.Z && git push origin vX.Y.Z &&
-      gh release create vX.Y.Z`. If a future pending-publisher change adds
-      an environment name, uncomment `environment:` in pypi.yml to match.
+- [ ] **Release 0.4.0** when you want symbol-level N3 public. It is already
+      on main (`0.4.0.dev0`): per-chunk `symbols` metadata (jsonl key,
+      `snapshot_from_arrays(chunk_symbols=...)`), jsonl
+      `{"path", "symbols"}` manifest for `--paths-manifest`, ghost chunks
+      (file alive, declared symbols gone) graded in the N3 bands, cartograph
+      recipe in `docs/export_recipes.md`. Procedure (used for 0.2.0/0.3.0):
+      set `__version__ = "0.4.0"` in `src/vecdiff/__init__.py`, commit,
+      `git tag v0.4.0 && git push origin main v0.4.0`, `gh release create
+      v0.4.0` → `.github/workflows/pypi.yml` runs tests → `uv build` → OIDC
+      trusted publishing (no tokens anywhere; PyPI pending publisher is
+      owner=ictechgy repo=vecdiff workflow=pypi.yml, environment blank —
+      don't add `environment:` to the workflow unless PyPI side changes).
+      After the run, verify with the PyPI JSON API + a clean-venv install;
+      note `uv pip install vecdiff` may serve a stale cache — pin
+      `vecdiff==X.Y.Z` when verifying.
+- [ ] **kartograph upstream: JSON graph export with opt-in source paths.**
+      This is the only thing blocking Android/Kotlin symbol-level N3.
+      kartograph (ictechgy's own tool) renders graphs without local paths
+      by design and has no JSON graph renderer (`export/` has DOT/baseline/
+      agent-doc renderers only; verified in its source 2026-09-06). Until
+      then Android stays file-level (`git ls-files '*.kt'`). When it lands:
+      add a conversion snippet next to the cartograph one in
+      `docs/export_recipes.md`; the vecdiff interface needs no changes.
+- [ ] **(Optional) dogfood the real dev pipeline.** The maintainer's
+      private code-search pipeline (vector DB over Android/iOS codebases)
+      was NOT on this machine (searched 2026-09-06). If it lives elsewhere,
+      two snapshots through the jsonl export + a `--queries-a/b` run on real
+      query logs would strengthen the case study beyond the already-shipped
+      real-code surrogate (`docs/case_study/`).
+- [ ] **Launch propagation** (from the planning doc's first-publication
+      strategy): get the case study cited in re-embedding / dual-index
+      migration guide blogs — no diff tool existed there; the README case
+      study section links `docs/case_study/` and is written to be quotable.
+- [ ] **ANN prefilter for N4 — only on real pain.** Exact O(n²·d) is
+      documented; if a user reports 100k+ chunk pain, consider an optional
+      ANN prefilter with an explicit exactness note (cost honesty invariant).
 
-## 3. v0.2 — adapter + supervised line
+## 2. Shipped (history, terse)
 
-- [x] **Any-vector-DB support shipped (v0.1.x)**: jsonl adapter (stdlib, gz-capable,
-      path-aware) + `snapshot_from_arrays()` in-memory API + `docs/export_recipes.md`
-      (Qdrant/Chroma/LanceDB/pgvector snippets). LanceDB/Qdrant *native-file* adapters
-      remain open below but are no longer the only path — the universal escape hatch
-      covers them today; only add a native-file adapter if users ask to diff the DB
-      files directly without an export step (follow the sqlite adapter pattern — never
-      build `file:` URIs by string concatenation; `as_uri()` regression test exists).
-- [x] **N5 constant-vector check — done 2026-09-06.** `check_n5` flags
-      bit-identical vectors reused across chunk ids (np.unique, exact,
-      O(n log n·d) — no O(n²)); small groups defer to N4 (re-chunking
-      semantics), a group ≥ 5 members or ≥ 5% of the index escalates to
-      constant/cached-embedding suspicion (pipeline-bug semantics). Wired
-      into CLI + console/JSON/Markdown reports; README signal table in
-      lockstep. Note: N4 still counts bit-identical pairs in its cosine
-      threshold scan — N5 is the diagnostic lens on top, not a partition.
-- [x] **Canonical-query supervised check (Q1) — done 2026-09-06.**
-      `--queries-a/--queries-b` (jsonl {id, vector} per side, embedded with
-      that side's model — loader `snapshot.load_query_vectors`, non-finite
-      rejected): per-query top-k Jaccard + rank inversions over both indexes,
-      worst-query drill-down, N1-style thresholds as Q1_* constants (README
-      in lockstep). `knn.topk_cosine_queries` is the external-query variant
-      (no self-exclusion) with the same blocking.
+- **0.2.0** — jsonl universal adapter (chunked float32 parse, gz, sidecar
+  `<stem>.meta.json`), `snapshot_from_arrays()`, export recipes
+  (Qdrant/Chroma/LanceDB/pgvector), non-finite (NaN/inf) rejection in every
+  adapter, vectorized N4, heavy-loss caps, real case study
+  (bge-small vs MiniLM over 371 real code chunks; N2 pre-normalized
+  false positive found and fixed by dogfooding).
+- **0.3.0** — N5 constant vectors (bit-identical reuse = pipeline-bug
+  semantics; exact np.unique), Q1 supervised canonical queries
+  (`--queries-a/b`, per-side embedded query jsonl,
+  `knn.topk_cosine_queries`), N3 file-level orphans (`--paths-manifest`
+  text), FAISS integration tests (local-only).
+- **0.4.0.dev0 (unreleased)** — N3 symbol-level ghosts: chunk `symbols`
+  metadata, jsonl `{path, symbols}` manifest, ghost detection + report
+  columns, cartograph recipe (usr + location.path schema verified),
+  kartograph documented as file-level until upstream.
+- **Repo history note:** the original Korean planning doc (기획서.md) was
+  `git filter-repo`-stripped from all history before going public; it now
+  lives as a **local-only gitignored file** — never re-commit it. The
+  pre-rewrite history (including the doc) is in
+  `/tmp/vecdiff-pre-filter.bundle` (may vanish on reboot; the working-tree
+  copy is the durable one). All commit hashes were rewritten once.
 
-## 4. v0.3 — the differentiator
+## 3. Ops knowledge that isn't written anywhere else
 
-- [x] **N3 interface landed 2026-09-06 (file-level)**: `--paths-manifest`
-      (newline-separated existing source paths) + `check_orphans` grade
-      chunks whose path vanished (0 / <5% / >=5% thresholds). The
-      Snapshot<->symbol-graph join is paths, as specified.
-- [x] **N3 symbol-level ghosts — landed 2026-09-06 (iOS path).** jsonl
-      snapshots may carry per-chunk `symbols` (join key alongside `path`);
-      `--paths-manifest` accepts a jsonl `{path, symbols}` manifest;
-      `check_orphans` flags ghost chunks (file alive, declared symbols
-      gone) in the same 0 / <5% / >=5% bands. Extractor recipes:
-      **cartograph** (Swift/iOS) `graph --format json` converts directly
-      (usr + location.path verified in its source); **kartograph**
-      (Kotlin/Android) cannot yet — its graph renderers deliberately omit
-      local paths and ship no JSON graph format, so Android stays
-      file-level (`git ls-files '*.kt'`) until kartograph grows a JSON
-      export with opt-in paths (upstream ask; it is also ictechgy's).
+- **CI billing quirk:** Actions on this GitHub account failed to *start*
+  ("payments have failed / spending limit") while the repo was private;
+  going public fixed it (free minutes). For future private repos on this
+  account, check Settings → Billing & plans before suspecting code.
+- **Platform-fragile tests:** never assert at an exact float boundary —
+  N4/Q1 scores are float32 blocked matmuls; BLAS rounding differs
+  (macOS Accelerate vs Linux OpenBLAS) and a float64-equal threshold can
+  miss by an ulp on CI. Bit us on the first-ever Linux run; margin
+  pattern + AGENTS.md gotcha entry exist.
+- **Thresholds lockstep:** every constant in `checks.py` must appear in the
+  README signal table in the same change (AGENTS.md invariant). Current
+  bands: N1 0.90/0.70 + heavy 2%/10%; N2 shift 5%/20%, outliers 1%/5%
+  (skipped when norm CV < 1e-6); N4 0/1%/1%; N5 <5 members/5%; Q1 mirrors
+  N1; N3 rot 0/<5%/≥5%.
+- **Exit codes:** 0/1/2 gate verdicts, 3 hard error; argparse usage errors
+  also exit 2 (documented in README — check stderr to distinguish).
 
-## 5. Known debts / honesty notes
+## 4. Context pointers
 
-- [x] **FAISS integration test — done 2026-09-06.** `faiss-cpu` installed in
-      the dev venv; `tests/test_faiss_integration.py` (flat round trip, empty
-      index, non-finite rejection) runs when faiss is present, skips cleanly
-      in CI via importorskip. Version on main bumped to 0.3.0.dev0 after the
-      0.2.0 release; N5 ships in 0.3.0.
-- [ ] `check_n4` on very large indexes is exact O(n²·d) — README documents it; if a user
-      reports 100k+ chunk pain, consider an optional ANN prefilter with an exactness note.
-- [ ] Docstring drift check: `tests/test_golden.py`-style staleness doesn't exist here, but
-      keep the README signal table and `checks.py` constants in lockstep (AGENTS.md rule).
-
-## Context pointers
-
-- Method root: kNN-IoU neighborhood comparison, prior art Vectory (pentoai) — cited in
-  README as the established method we operationalize for production code-index ops.
-- Sibling projects: `../tombstone` (agent negative memory) and `../agent2perfetto`
-  (session traces) share the local-first/graded-findings grammar; `../yield-audit` M9
-  measures the ROI of the vector-DB investment this tool protects.
+- Method root: kNN-IoU neighborhood comparison; prior art Vectory
+  (pentoai), cited in README as the method vecdiff operationalizes for
+  production index ops. Differentiation vs Ragas/MTEB also in README.
+- Extractor siblings (symbol-graph suppliers for N3): **cartograph**
+  (Swift/iOS, github.com/ictechgy/cartograph — usable today) and
+  **kartograph** (Kotlin/Android, github.com/ictechgy/kartograph — blocked
+  upstream, see §1).
+- Other siblings: `../tombstone` (agent negative memory),
+  `../agent2perfetto` (session traces) share the local-first /
+  graded-findings grammar; `../yield-audit` M9 measures the ROI of the
+  vector-DB investment this tool protects.
