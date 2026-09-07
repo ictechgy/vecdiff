@@ -8,6 +8,6 @@ constant vectors (N5).
 Fully local, zero network at runtime, deterministic, numpy-only.
 """
 
-__version__ = "0.4.1.dev0"
+__version__ = "0.4.1"
 
 __all__ = ["__version__"]
