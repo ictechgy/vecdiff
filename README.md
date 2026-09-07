@@ -37,7 +37,7 @@ echo $?
 
 You get console findings plus `report.md`, and `--gate` turns them into an exit code for CI (see below).
 
-## What it checks (v0.1)
+## What it checks
 
 | # | Check | What it catches |
 |---|---|---|
@@ -46,9 +46,7 @@ You get console findings plus `report.md`, and `--gate` turns them into an exit 
 | **N4** | Duplicates | Re-chunking accidents and boilerplate floods: within-index pairs at cosine ≥ threshold |
 | **N5** | Constant vectors | Pipeline bugs (cached API response, constant fallback, broken batch): one bit-identical embedding reused across many chunk ids |
 | **Q1** (`--queries-a/b`) | Canonical queries (supervised) | What real retrieval traffic would see: the same query set run through both indexes, per-query top-k overlap + rank inversions |
-| **N3** (`--paths-manifest`) | Orphans + ghosts | Rot: chunks whose source file no longer exists; with a symbol-graph manifest (e.g. [cartograph](https://github.com/ictechgy/cartograph) for Swift), chunks whose file survives but whose declared symbols are gone |
-
-Roadmap: **N3** orphan/ghost chunks audited against a symbol graph (iOS IndexStoreDB / Kotlin), canonical-query supervised comparison, time-series rot monitoring.
+| **N3** (`--paths-manifest`) | Orphans + ghosts | Rot: chunks whose source file no longer exists (file-level: a plain path list); with a symbol-graph manifest (e.g. [cartograph](https://github.com/ictechgy/cartograph) for Swift/iOS, [kartograph](https://github.com/ictechgy/kartograph) for Kotlin/Android), chunks whose file survives but whose declared symbols are gone |
 
 ### Signal thresholds
 
@@ -60,13 +58,13 @@ vecdiff reports graded signals, never a verdict like "model B is better". Thresh
 | N1 heavy-loss chunks (Jaccard ≤ 0.30, i.e. ≥ 70% of top-k lost) | < 2% of sampled | < 10% | ≥ 10% |
 | N2 norm mean shift A→B | ≤ 5% | ≤ 20% | > 20% |
 | N2 extreme-norm outliers (\|z\| > 3) | ≤ 1% | < 5% | ≥ 5% |
-
-The N2 outlier check is skipped (reported green, with the reason inline) when norm variance is ≈ 0 — e.g. embedders that return pre-normalized unit vectors, where z-scores would be float rounding noise.
 | N4 duplicate pairs (cosine ≥ threshold) / n | 0 | < 1% | ≥ 1% |
 | N5 largest bit-identical group | < 5 members | ≥ 5 members | ≥ 5% of index |
 | Q1 mean query Jaccard | ≥ 0.90 | ≥ 0.70 | < 0.70 |
 | Q1 heavy-loss queries (Jaccard ≤ 0.30) | < 2% | < 10% | ≥ 10% |
 | N3 rot chunks (orphans + ghosts) / n | 0 | < 5% | ≥ 5% |
+
+The N2 outlier check is skipped (reported green, with the reason inline) when norm variance is ≈ 0 — e.g. embedders that return pre-normalized unit vectors, where z-scores would be float rounding noise.
 
 `--gate` exit codes: `0` all green, `1` any yellow, `2` any red. (Note: argparse usage errors — a mistyped flag — also exit 2; check stderr to tell them apart from a red verdict. Hard errors — unreadable snapshot, dimension mismatch — exit 3.)
 
