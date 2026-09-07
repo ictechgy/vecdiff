@@ -13,14 +13,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 from . import __version__
 from . import checks
 from . import report as rpt
-from .errors import VecdiffError
-from .errors import SnapshotError
-from .snapshot import load_snapshot
+from .errors import SnapshotError, VecdiffError
+from .snapshot import load_paths_manifest, load_snapshot
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,9 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Diff two embedding-index snapshots and report graded "
             "findings: N1 neighbor stability, N2 population stats, "
-            "N4 duplicates. Fully local, deterministic, numpy-only. "
-            "vecdiff collects evidence for human judgment; it never "
-            "claims one index or model is better."
+            "N4 duplicates, N5 constant vectors, plus optional Q1 "
+            "canonical queries and N3 rot audit (orphan/ghost chunks). "
+            "Fully local, deterministic, numpy-only. vecdiff collects "
+            "evidence for human judgment; it never claims one index or "
+            "model is better."
         ),
     )
     p.add_argument("snapshot_a", help="snapshot A (blue / before): dir, .npz, .jsonl(.gz), .db/.sqlite, or .index")
@@ -168,48 +168,7 @@ def main(argv: list[str] | None = None) -> int:
 
         n3_stats: dict | None = None
         if args.paths_manifest:
-            try:
-                manifest_text = Path(args.paths_manifest).read_text(encoding="utf-8")
-            except OSError as exc:
-                raise SnapshotError(
-                    f"could not read paths manifest '{args.paths_manifest}': {exc}"
-                ) from exc
-            existing: set[str] = set()
-            live_symbols: dict[str, set[str]] = {}
-            if args.paths_manifest.endswith(".jsonl"):
-                import json as _json
-
-                for lineno, line in enumerate(
-                    manifest_text.splitlines(), start=1
-                ):
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    try:
-                        rec = _json.loads(line)
-                    except _json.JSONDecodeError as exc:
-                        raise SnapshotError(
-                            f"paths manifest '{args.paths_manifest}': line "
-                            f"{lineno} is not valid JSON: {exc}"
-                        ) from exc
-                    if not isinstance(rec, dict) or "path" not in rec:
-                        raise SnapshotError(
-                            f"paths manifest '{args.paths_manifest}': line "
-                            f"{lineno} must be an object with key 'path' "
-                            "(and optionally 'symbols')"
-                        )
-                    existing.add(str(rec["path"]))
-                    if isinstance(rec.get("symbols"), list):
-                        live_symbols[str(rec["path"])] = {
-                            str(x) for x in rec["symbols"]
-                        }
-            else:
-                existing = {
-                    line.strip()
-                    for line in manifest_text.splitlines()
-                    if line.strip() and not line.startswith("#")
-                }
-            live = live_symbols or None
+            existing, live = load_paths_manifest(args.paths_manifest)
             n3_a_stats, n3_a_findings = checks.check_orphans(
                 snap_a, "A", existing, live
             )

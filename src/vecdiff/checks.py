@@ -52,6 +52,12 @@ N5_FLOOD_FRACTION = 0.05  # largest group >= 5% of n -> red
 
 SEVERITY_ORDER = {"green": 0, "yellow": 1, "red": 2}
 N4_EXAMPLE_CAP = 1000  # stored examples cap (pair *count* is always exact)
+# Per-block cap on materialized duplicate hits. A duplicate flood (the exact
+# scenario N4 exists to flag) would otherwise build per-block coordinate and
+# id arrays in the hundreds of MB just to count pairs we already counted;
+# beyond this, affected-id/example collection is skipped for that block and
+# the pair count alone is reported (it stays exact).
+N4_BLOCK_HIT_CAP = 1_000_000
 N1_HEAVY_EXAMPLE_CAP = 200  # heavy-loss ids stored in stats (count is exact)
 
 
@@ -374,8 +380,8 @@ def check_n2(snap_a: Snapshot, snap_b: Snapshot) -> tuple[dict, list[Finding]]:
         raise DimensionMismatchError(
             f"dimension mismatch: A dim={snap_a.dim} (model {snap_a.model!r}) vs "
             f"B dim={snap_b.dim} (model {snap_b.model!r}). Cross-dimension "
-            "comparison is a hard error for vecdiff v0.1 — re-export both "
-            "snapshots with a common dimension."
+            "comparison is a hard error — re-export both snapshots with a "
+            "common dimension."
         )
 
     findings.append(
@@ -524,17 +530,25 @@ def check_n4(
     examples_seen = 0
     affected: set[str] = set()
     examples: list[dict] = []
+    flood_guard = False
     step = block_rows(n)
     for start in range(0, n, step):
         end = min(n, start + step)
-        sims = v[start:end] @ v.T  # (b, n)
-        upper = np.arange(n)[None, :] > np.arange(start, end)[:, None]
+        # Only the upper triangle is needed; computing against v[:end] halves
+        # the FLOPs versus a full (b, n) product.
+        sims = v[start:end] @ v[:end].T  # (b, end)
+        upper = np.arange(end)[None, :] > np.arange(start, end)[:, None]
         hits = (sims >= threshold) & upper
         count = int(np.count_nonzero(hits))
         if not count:
             continue
         pair_count += count
         examples_seen += count
+        if count > N4_BLOCK_HIT_CAP:
+            # duplicate flood: skip materializing coords/ids for this block
+            # (pair count above is already exact); flag the truncation
+            flood_guard = True
+            continue
         coords = np.argwhere(hits)
         # vectorized affected-id collection: a duplicate explosion is n^2/2
         # pairs, and a Python-level loop over it would dominate the run
@@ -568,6 +582,7 @@ def check_n4(
             "affected_ids": len(affected),
             "examples": examples[:10],
             "examples_truncated": truncated,
+            "flood_guard_truncated": flood_guard,
         }
     )
 
@@ -702,12 +717,13 @@ def check_n5(
 
 # Thresholds mirror N1's by design (they measure the same quantity — top-k
 # neighborhood survival — just over real queries instead of chunk ids).
-Q1_MEAN_GREEN = 0.90
-Q1_MEAN_YELLOW = 0.70
-Q1_HEAVY_LOSS_JACCARD = 0.30
-Q1_HEAVY_GREEN = 0.02
-Q1_HEAVY_YELLOW = 0.10
-Q1_RANK_INVERSION_BIG = 5
+# Aliased, not re-stated, so the mirror cannot drift.
+Q1_MEAN_GREEN = N1_MEAN_GREEN
+Q1_MEAN_YELLOW = N1_MEAN_YELLOW
+Q1_HEAVY_LOSS_JACCARD = N1_HEAVY_LOSS_JACCARD
+Q1_HEAVY_GREEN = N1_HEAVY_GREEN
+Q1_HEAVY_YELLOW = N1_HEAVY_YELLOW
+Q1_RANK_INVERSION_BIG = N1_RANK_INVERSION_BIG
 Q1_WORST_LISTED = 10
 
 
@@ -926,12 +942,15 @@ def check_orphans(
     use_symbols = live and snap.symbols is not None
 
     orphans: list[str] = []
+    orphan_paths: list[str] = []  # paths of the first few orphans (message)
     ghosts: list[tuple[str, str, list[str]]] = []  # (id, path, dead symbols)
     for pos, (cid, raw) in enumerate(zip(snap.ids, snap.paths)):
         stats["with_path_metadata"] += 1
         path = norm(raw)
         if path not in existing:
             orphans.append(cid)
+            if len(orphan_paths) < 3:
+                orphan_paths.append(raw)
             continue
         if use_symbols:
             declared = snap.symbols[pos]
@@ -971,7 +990,7 @@ def check_orphans(
         if orphans:
             parts.append(
                 f"{len(orphans)} orphan chunk(s) (path gone), e.g. "
-                f"{[snap.paths[snap.ids.index(c)] for c in orphans[:3]]}"
+                f"{orphan_paths}"
             )
         if ghosts:
             g = ghosts[0]

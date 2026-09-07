@@ -57,6 +57,11 @@ FAISS_SUFFIXES = {".index", ".faiss"}
 NATIVE_SUFFIXES = {".npz", ".npy"}
 JSONL_SUFFIXES = {".jsonl", ".ndjson"}
 JSONL_CHUNK_ROWS = 8192  # rows buffered as Python floats before float32 conversion
+# Sanity cap on one jsonl line (chars). A legitimate dim-4096 vector line is
+# ~100 KB; anything past this is a malformed/hostile dump and would otherwise
+# amplify into a huge float list before validation can reject it. A guard,
+# not a hard security boundary — the line itself is already in memory.
+JSONL_MAX_LINE_CHARS = 4 * 1024 * 1024
 
 
 @dataclass
@@ -364,6 +369,12 @@ def _load_jsonl(p: Path) -> Snapshot:
                 line = line.strip()
                 if not line:
                     continue
+                if len(line) > JSONL_MAX_LINE_CHARS:
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} exceeds "
+                        f"{JSONL_MAX_LINE_CHARS} chars — not a plausible chunk "
+                        "record; refusing to parse it"
+                    )
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
@@ -792,7 +803,8 @@ def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
     Companion to the supervised Q1 check: queries are embedded per side
     (each snapshot's own model), so a query file carries ids + vectors and
     nothing else. Validation mirrors the jsonl snapshot adapter, including
-    the non-finite rejection. Returns ``(ids, vectors (n, dim) float32)``.
+    the chunked float32 conversion (``JSONL_CHUNK_ROWS``) and the non-finite
+    rejection. Returns ``(ids, vectors (n, dim) float32)``.
     """
     import gzip
 
@@ -800,7 +812,8 @@ def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
     if not p.is_file():
         raise SnapshotError(f"query file does not exist: {p}")
     ids: list[str] = []
-    rows: list[list[float]] = []
+    buf: list[list[float]] = []
+    chunks: list[np.ndarray] = []
     dim = 0
     opener = gzip.open if p.name.lower().endswith(".gz") else open
     try:
@@ -809,6 +822,12 @@ def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
                 line = line.strip()
                 if not line:
                     continue
+                if len(line) > JSONL_MAX_LINE_CHARS:
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} exceeds "
+                        f"{JSONL_MAX_LINE_CHARS} chars — not a plausible query "
+                        "record; refusing to parse it"
+                    )
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
@@ -846,15 +865,82 @@ def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
                         f"{len(row)}, expected {dim}"
                     )
                 ids.append(obj["id"])
-                rows.append(row)
+                buf.append(row)
+                if len(buf) >= JSONL_CHUNK_ROWS:
+                    chunks.append(np.asarray(buf, dtype=np.float32))
+                    buf.clear()
     except SnapshotError:
         raise
     except (OSError, gzip.BadGzipFile, EOFError, UnicodeDecodeError) as exc:
         raise SnapshotError(f"could not read query file '{p}': {exc}") from exc
     if len(set(ids)) != len(ids):
         raise SnapshotError(f"query file '{p}': duplicate query ids")
-    if not rows:
+    if buf:
+        chunks.append(np.asarray(buf, dtype=np.float32))
+    if not ids:
         return [], np.zeros((0, 0), dtype=np.float32)
-    vectors = np.asarray(rows, dtype=np.float32)
+    vectors = np.concatenate(chunks)
     _require_finite(vectors, ids, str(p))
     return ids, vectors
+
+
+def load_paths_manifest(
+    path: str | Path,
+) -> tuple[set[str], dict[str, set[str]] | None]:
+    """Load the N3 rot-audit manifest.
+
+    Two levels, one interface — paths are the join key:
+
+    * plain text (default): one existing source path per line; blank lines
+      and ``#`` comments are skipped.
+    * ``.jsonl``: one ``{"path": str, "symbols"?: [str, ...]}`` record per
+      line, e.g. from a symbol-graph extractor (cartograph/kartograph).
+      Blank/comment lines are skipped here too.
+
+    Returns ``(existing_paths, live_symbols)`` where ``live_symbols`` is
+    ``None`` for a file-level manifest and a path -> declared-symbol-set
+    map otherwise (symbol-level ghost detection also requires the chunks
+    to carry ``symbols`` metadata).
+    """
+    p = Path(path)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SnapshotError(f"could not read paths manifest '{p}': {exc}") from exc
+
+    existing: set[str] = set()
+    live_symbols: dict[str, set[str]] = {}
+    if p.name.endswith(".jsonl"):
+        import json as _json
+
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if len(line) > JSONL_MAX_LINE_CHARS:
+                raise SnapshotError(
+                    f"paths manifest '{p}': line {lineno} exceeds "
+                    f"{JSONL_MAX_LINE_CHARS} chars — not a plausible manifest "
+                    "record; refusing to parse it"
+                )
+            try:
+                rec = _json.loads(line)
+            except _json.JSONDecodeError as exc:
+                raise SnapshotError(
+                    f"paths manifest '{p}': line {lineno} is not valid JSON: {exc}"
+                ) from exc
+            if not isinstance(rec, dict) or "path" not in rec:
+                raise SnapshotError(
+                    f"paths manifest '{p}': line {lineno} must be an object with "
+                    "key 'path' (and optionally 'symbols')"
+                )
+            existing.add(str(rec["path"]))
+            if isinstance(rec.get("symbols"), list):
+                live_symbols[str(rec["path"])] = {str(x) for x in rec["symbols"]}
+    else:
+        existing = {
+            line.strip()
+            for line in text.splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+    return existing, (live_symbols or None)

@@ -533,3 +533,19 @@ def test_n3_symbol_manifest_without_chunk_symbols_stays_file_level():
     assert stats["ghosts"] == 0
     assert findings[0].severity == "green"
     assert "file-level" in findings[0].message
+
+
+def test_n4_duplicate_flood_guard_keeps_pair_count_exact():
+    # One constant vector across the whole index = the duplicate-explosion
+    # scenario N4 exists to flag. n=1500 gives 1,124,250 pairs in a single
+    # block (> N4_BLOCK_HIT_CAP), so the guard skips materializing
+    # coords/ids — but the pair count must stay exact and the finding red.
+    n = 1500
+    ids = make_ids(n)
+    v = np.ones((n, 8), dtype=np.float32)
+    stats, findings = checks.check_n4(make_snapshot(ids, v), "A")
+    assert stats["pairs"] == n * (n - 1) // 2
+    assert stats["flood_guard_truncated"] is True
+    assert stats["affected_ids"] == 0
+    assert stats["examples"] == []
+    assert findings[0].severity == "red"

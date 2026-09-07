@@ -270,7 +270,9 @@ def render_console(rep: dict) -> str:
 
 
 def _md_escape(text: str) -> str:
-    return text.replace("|", "\\|")
+    # table-cell safe: pipes break columns, newlines (a JSON string id can
+    # carry one) break rows
+    return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
 def render_markdown(rep: dict) -> str:

@@ -66,6 +66,14 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   `{path, symbols}` manifest, ghost detection + report columns, cartograph
   recipe (usr + location.path schema verified). kartograph recipe added
   post-release (docs-only; see §1).
+- **0.4.1.dev0 (unreleased)** — perf/structure review fixes: N4 duplicate-
+  flood guard (per-block hit cap; pair count stays exact, affected/examples
+  skipped past 1M hits/block) + upper-triangle-only FLOPs (2x), query-jsonl
+  loader now chunked like the snapshot loader, paths-manifest parsing
+  extracted from cli.py to `snapshot.load_paths_manifest()`, jsonl line
+  sanity cap (4 MB) on snapshot/query/manifest loads, markdown escape
+  handles newlines, Q1 thresholds alias N1 (drift-proof), stale v0.1
+  message and CLI --help description fixed.
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
   lives as a **local-only gitignored file** — never re-commit it. The

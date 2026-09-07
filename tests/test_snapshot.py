@@ -605,3 +605,97 @@ def test_snapshot_without_symbols_field_is_none(tmp_path, rng):
         [{"id": "a", "vector": [1.0, 2.0]}],
     )
     assert load_snapshot(tmp_path / "s.jsonl").symbols is None
+
+
+# ---------------------------------------------------------------------------
+# paths manifest loader (N3)
+# ---------------------------------------------------------------------------
+
+
+def test_load_paths_manifest_text_skips_comments_and_blanks(tmp_path):
+    from vecdiff.snapshot import load_paths_manifest
+
+    m = tmp_path / "tree.txt"
+    m.write_text(
+        "# comment\n"
+        "\n"
+        "src/a.py\n"
+        "  src/b.py  \n"
+        "# another\n"
+        "app/main.kt\n",
+        encoding="utf-8",
+    )
+    existing, live = load_paths_manifest(m)
+    assert existing == {"src/a.py", "src/b.py", "app/main.kt"}
+    assert live is None  # file-level manifest
+
+
+def test_load_paths_manifest_jsonl_symbols(tmp_path):
+    from vecdiff.snapshot import load_paths_manifest
+
+    m = tmp_path / "symbols.jsonl"
+    m.write_text(
+        "# extractor comment\n"
+        '{"path": "App/Login.swift", "symbols": ["s:Login", "s:Login.body"]}\n'
+        '{"path": "src/a.py", "symbols": []}\n',
+        encoding="utf-8",
+    )
+    existing, live = load_paths_manifest(m)
+    assert existing == {"App/Login.swift", "src/a.py"}
+    assert live == {"App/Login.swift": {"s:Login", "s:Login.body"}, "src/a.py": set()}
+
+
+def test_load_paths_manifest_jsonl_bad_line_reports_number(tmp_path):
+    from vecdiff.snapshot import load_paths_manifest
+
+    m = tmp_path / "symbols.jsonl"
+    m.write_text('{"path": "ok.py"}\nnot json\n', encoding="utf-8")
+    with pytest.raises(SnapshotError, match="line 2"):
+        load_paths_manifest(m)
+
+
+def test_load_paths_manifest_missing_file(tmp_path):
+    from vecdiff.snapshot import load_paths_manifest
+
+    with pytest.raises(SnapshotError, match="could not read"):
+        load_paths_manifest(tmp_path / "nope.txt")
+
+
+def test_jsonl_line_cap_rejects_huge_line(tmp_path, monkeypatch):
+    import vecdiff.snapshot as snap_mod
+
+    monkeypatch.setattr(snap_mod, "JSONL_MAX_LINE_CHARS", 64)
+    (tmp_path / "s.jsonl").write_text(
+        json.dumps({"id": "a", "vector": [0.5] * 32}) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SnapshotError, match="exceeds"):
+        load_snapshot(tmp_path / "s.jsonl")
+
+
+def test_query_line_cap_rejects_huge_line(tmp_path, monkeypatch):
+    import vecdiff.snapshot as snap_mod
+    from vecdiff.snapshot import load_query_vectors
+
+    monkeypatch.setattr(snap_mod, "JSONL_MAX_LINE_CHARS", 64)
+    (tmp_path / "q.jsonl").write_text(
+        json.dumps({"id": "q1", "vector": [0.5] * 32}) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(SnapshotError, match="exceeds"):
+        load_query_vectors(tmp_path / "q.jsonl")
+
+
+def test_query_loader_chunking_matches_whole_file(tmp_path, rng, monkeypatch):
+    # chunked float32 conversion (JSONL_CHUNK_ROWS) must be value-identical
+    # to a whole-file parse
+    import vecdiff.snapshot as snap_mod
+    from vecdiff.snapshot import load_query_vectors
+
+    monkeypatch.setattr(snap_mod, "JSONL_CHUNK_ROWS", 3)
+    n, d = 10, 4
+    vecs = rng.standard_normal((n, d))
+    with open(tmp_path / "q.jsonl", "w", encoding="utf-8") as fh:
+        for i, v in enumerate(vecs):
+            fh.write(json.dumps({"id": f"q{i}", "vector": list(map(float, v))}) + "\n")
+    ids, loaded = load_query_vectors(tmp_path / "q.jsonl")
+    assert ids == [f"q{i}" for i in range(n)]
+    np.testing.assert_allclose(loaded, vecs.astype(np.float32), rtol=1e-6)

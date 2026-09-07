@@ -253,3 +253,12 @@ def test_cli_jsonl_symbol_manifest_ghosts(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "N3 rot audit" in out
     assert "ghost" in out
+
+
+def test_markdown_escape_keeps_table_rows_intact():
+    from vecdiff.report import _md_escape
+
+    assert _md_escape("a|b") == "a\\|b"
+    # a JSON string id can carry a newline; it must not break the table row
+    assert "\n" not in _md_escape("chunk\nwith newline")
+    assert _md_escape("chunk\r\nwith crlf") == "chunk  with crlf"
