@@ -4,6 +4,8 @@ Diff two embedding-index snapshots and get graded, evidence-first findings — f
 
 Fully local, deterministic, `numpy`-only. vecdiff never needs your original vector DB and never touches a network.
 
+[한국어 문서](README.ko.md)
+
 > The standard advice for re-embedding is "run the new index side by side (blue/green), compare, then cut over." Nobody ships the *compare* step — teams throw a few queries at both indexes and go by feel. vecdiff mechanizes that comparison.
 
 ```console
