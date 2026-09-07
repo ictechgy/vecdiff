@@ -2,9 +2,10 @@
 
 Read `AGENTS.md` first (layout, invariants, judgment discipline, test gotchas).
 
-**State at writing (2026-09-06):** main = `0.4.0.dev0` (19 commits, clean
-tree, 104 tests: 103 green + 1 intended skip¹). **PyPI has 0.2.0 and 0.3.0**
-(pypi.org/project/vecdiff); repo public at
+**State at writing (2026-09-07):** main = `0.4.0` **published on PyPI**
+(N3 symbol-level ghosts;
+https://github.com/ictechgy/vecdiff/releases/tag/v0.4.0), 21 commits,
+104 tests: 103 green + 1 intended skip¹. Repo public at
 https://github.com/ictechgy/vecdiff, CI green on 3.10 + 3.13.
 The full v0.1–v0.3 roadmap from the original planning doc is shipped; what
 remains is below, ordered.
@@ -15,17 +16,13 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
 
 ## 1. Do next — in this order
 
-- [ ] **Release 0.4.0** when you want symbol-level N3 public. It is already
-      on main (`0.4.0.dev0`): per-chunk `symbols` metadata (jsonl key,
-      `snapshot_from_arrays(chunk_symbols=...)`), jsonl
-      `{"path", "symbols"}` manifest for `--paths-manifest`, ghost chunks
-      (file alive, declared symbols gone) graded in the N3 bands, cartograph
-      recipe in `docs/export_recipes.md`. Procedure (used for 0.2.0/0.3.0):
-      set `__version__ = "0.4.0"` in `src/vecdiff/__init__.py`, commit,
-      `git tag v0.4.0 && git push origin main v0.4.0`, `gh release create
-      v0.4.0` → `.github/workflows/pypi.yml` runs tests → `uv build` → OIDC
-      trusted publishing (no tokens anywhere; PyPI pending publisher is
-      owner=ictechgy repo=vecdiff workflow=pypi.yml, environment blank —
+- [x] **0.4.0 released 2026-09-07** — published on PyPI (workflow green,
+      wheel verified by direct download + import). Procedure used for
+      0.2.0/0.3.0/0.4.0: set `__version__` in `src/vecdiff/__init__.py`,
+      commit, `git tag vX.Y.Z && git push origin main vX.Y.Z`, `gh release
+      create vX.Y.Z` → `.github/workflows/pypi.yml` runs tests → `uv build`
+      → OIDC trusted publishing (no tokens anywhere; PyPI pending publisher
+      is owner=ictechgy repo=vecdiff workflow=pypi.yml, environment blank —
       don't add `environment:` to the workflow unless PyPI side changes).
       After the run, verify with the PyPI JSON API + a clean-venv install;
       note `uv pip install vecdiff` may serve a stale cache — pin
@@ -65,10 +62,10 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   (`--queries-a/b`, per-side embedded query jsonl,
   `knn.topk_cosine_queries`), N3 file-level orphans (`--paths-manifest`
   text), FAISS integration tests (local-only).
-- **0.4.0.dev0 (unreleased)** — N3 symbol-level ghosts: chunk `symbols`
-  metadata, jsonl `{path, symbols}` manifest, ghost detection + report
-  columns, cartograph recipe (usr + location.path schema verified),
-  kartograph documented as file-level until upstream.
+- **0.4.0** — N3 symbol-level ghosts: chunk `symbols` metadata, jsonl
+  `{path, symbols}` manifest, ghost detection + report columns, cartograph
+  recipe (usr + location.path schema verified), kartograph documented as
+  file-level until upstream.
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
   lives as a **local-only gitignored file** — never re-commit it. The
