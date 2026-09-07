@@ -210,8 +210,41 @@ tree (`swift build` writes `.build/index/store`; Xcode needs
 ### From kartograph (Kotlin / Android)
 
 [kartograph](https://github.com/ictechgy/kartograph) builds its graph from
-compiled classes, but its graph renderers deliberately omit local source
-paths and ship no JSON graph format yet — so today it cannot feed the
-symbol-level manifest. Use the file-level manifest for Android
-(`git ls-files '*.kt' > tree.txt`) until kartograph grows a JSON graph
-export with opt-in paths; the vecdiff side of the interface is ready.
+compiled classes and can emit a `code-graph` JSON exchange document with
+project-relative source paths (opt-in; absolute paths are never emitted,
+by design — chunk `path`/`symbols` must use the same project-relative
+convention). v0.3.1+ recommended (v0.3.0 had a path-resolution bug):
+
+```bash
+# CLI
+kartograph graph --classes app/build/tmp/kotlin-classes/debug \
+  --format json --include-paths --project . > graph.json
+# or via the Gradle plugin (io.github.ictechgy.kartograph):
+./gradlew kartographGraphDebug   # → build/reports/kartograph/debug-graph.json
+```
+
+Nodes carry `usr`, `qualifiedName`, `kind`, `synthesized` and
+`location: {path, pathKind, line?, column?}` — the same `usr`/`location`
+keys as the query surface. Keep only nodes whose `pathKind` is
+`projectRelative`; `sourceFileName` nodes could not be uniquely resolved
+to a file (they remain usable, just not path-joinable). The document's
+`limitations` array quantifies unresolved/missing paths:
+
+```python
+import json
+from collections import defaultdict
+
+doc = json.load(open("graph.json"))
+live = defaultdict(set)
+for node in doc["nodes"]:
+    loc = node.get("location") or {}
+    if loc.get("pathKind") == "projectRelative" and not node.get("synthesized"):
+        live[loc["path"]].add(node["usr"])   # or node["qualifiedName"]
+with open("symbols.jsonl", "w") as f:
+    for path, syms in sorted(live.items()):
+        f.write(json.dumps({"path": path, "symbols": sorted(syms)}) + "\n")
+```
+
+Run kartograph on a fresh build so the compiled classes reflect the
+current tree, and use the same path convention in the chunk export
+(e.g. repo-root-relative) so N3's join matches.

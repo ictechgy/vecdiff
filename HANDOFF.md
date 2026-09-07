@@ -27,14 +27,14 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
       After the run, verify with the PyPI JSON API + a clean-venv install;
       note `uv pip install vecdiff` may serve a stale cache — pin
       `vecdiff==X.Y.Z` when verifying.
-- [ ] **kartograph upstream: JSON graph export with opt-in source paths.**
-      This is the only thing blocking Android/Kotlin symbol-level N3.
-      kartograph (ictechgy's own tool) renders graphs without local paths
-      by design and has no JSON graph renderer (`export/` has DOT/baseline/
-      agent-doc renderers only; verified in its source 2026-09-06). Until
-      then Android stays file-level (`git ls-files '*.kt'`). When it lands:
-      add a conversion snippet next to the cartograph one in
-      `docs/export_recipes.md`; the vecdiff interface needs no changes.
+- [x] **kartograph recipe added 2026-09-07.** kartograph ships a
+      `code-graph` JSON export with opt-in project-relative paths since
+      v0.3.0 (v0.3.1+ recommended; schema verified in
+      `export/GraphJsonRenderer.kt`: nodes carry `usr`/`qualifiedName`/
+      `location.path` + `pathKind`, absolute paths never emitted — join on
+      project-relative paths). Recipe with CLI + Gradle-plugin invocations
+      and the conversion snippet now lives next to the cartograph one in
+      `docs/export_recipes.md`; the vecdiff interface needed no changes.
 - [ ] **(Optional) dogfood the real dev pipeline.** The maintainer's
       private code-search pipeline (vector DB over Android/iOS codebases)
       was NOT on this machine (searched 2026-09-06). If it lives elsewhere,
@@ -64,8 +64,8 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   text), FAISS integration tests (local-only).
 - **0.4.0** — N3 symbol-level ghosts: chunk `symbols` metadata, jsonl
   `{path, symbols}` manifest, ghost detection + report columns, cartograph
-  recipe (usr + location.path schema verified), kartograph documented as
-  file-level until upstream.
+  recipe (usr + location.path schema verified). kartograph recipe added
+  post-release (docs-only; see §1).
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
   lives as a **local-only gitignored file** — never re-commit it. The
