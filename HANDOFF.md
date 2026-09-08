@@ -1,10 +1,11 @@
 # HANDOFF — what the next session should do
 
-## 2026-09-08 전체 코드 검토 — 수정 완료 (0.4.2.dev0)
+## 2026-09-08 전체 코드 검토 — 수정 완료, **0.4.2 released on PyPI**
 
-- 기준: `main@ac2627b`, 27 commits, 검토 시작 시 워킹트리 clean. 아래 4건은
-  **2026-09-08 후속 세션에서 모두 수정 + 회귀 테스트 추가 완료** (123 passed
-  + 1 intended skip, +11 tests). 아래 원문은 검토 기록으로 보존한다.
+- 검토 4건은 2026-09-08 모두 수정 + 회귀 테스트 추가 완료, 그대로
+  **v0.4.2로 릴리스됨** (workflow green, wheel 직접 다운로드+import 검증;
+  https://github.com/ictechgy/vecdiff/releases/tag/v0.4.2).
+  123 passed + 1 intended skip (+11 tests).
 
 ### 확인된 수정 필요 사항 — 전부 수정됨
 
@@ -123,11 +124,11 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   snapshot/query/manifest loads, markdown escape handles newlines, Q1
   thresholds alias N1 (drift-proof), stale v0.1 message and CLI --help
   description fixed. 112 tests (+9).
-- **0.4.2.dev0 (unreleased)** — 2026-09-08 code-review fixes: sqlite
-  empty-vector-blob rejection, N3 partial-path coverage rule (empty path =
-  unreported, excluded from the audit; rot fraction over path-reported
-  chunks — README/README.ko lockstep), huge-JSON-integer conversion wrapped
-  as line-numbered SnapshotError (exit 3, no traceback), streaming
+- **0.4.2** — 2026-09-08 code-review fixes: sqlite empty-vector-blob
+  rejection, N3 partial-path coverage rule (empty path = unreported,
+  excluded from the audit; rot fraction over path-reported chunks —
+  README/README.ko lockstep), huge-JSON-integer conversion wrapped as
+  line-numbered SnapshotError (exit 3, no traceback), streaming
   paths-manifest loader. 123 tests (+11).
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
