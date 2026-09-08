@@ -423,7 +423,15 @@ def _load_jsonl(p: Path) -> Snapshot:
                         f"jsonl snapshot '{p}': line {lineno} 'symbols' must be "
                         "a list of strings"
                     )
-                row = [float(x) for x in vec]
+                try:
+                    row = [float(x) for x in vec]
+                except (OverflowError, ValueError) as exc:
+                    # a valid-JSON 1000-digit integer parses fine but cannot
+                    # become a float; without this it escapes as a traceback
+                    raise SnapshotError(
+                        f"jsonl snapshot '{p}': line {lineno} 'vector' has a "
+                        f"value not convertible to float: {exc}"
+                    ) from exc
                 if dim == 0:
                     dim = len(row)
                 elif len(row) != dim:
@@ -564,6 +572,14 @@ def _load_sqlite(p: Path) -> Snapshot:
                 f"sqlite snapshot '{p}': chunks.vec for id {row_id!r} is not a BLOB"
             )
         buf = bytes(blob)
+        if not buf:
+            # an empty blob would load as dim=0 and skip the shared dim > 0
+            # validation (this adapter builds Snapshots directly) — a chunk
+            # with no vector data is malformed input, not an empty snapshot
+            raise SnapshotError(
+                f"sqlite snapshot '{p}': vec blob for id {row_id!r} is empty "
+                "(0 floats) — every chunk must carry at least one dimension"
+            )
         if len(buf) % 4 != 0:
             raise SnapshotError(
                 f"sqlite snapshot '{p}': vec blob for id {row_id!r} has length "
@@ -856,7 +872,13 @@ def load_query_vectors(path: str | Path) -> tuple[list[str], np.ndarray]:
                         f"query file '{p}': line {lineno} 'vector' must be a "
                         "non-empty list of numbers"
                     )
-                row = [float(x) for x in vec]
+                try:
+                    row = [float(x) for x in vec]
+                except (OverflowError, ValueError) as exc:
+                    raise SnapshotError(
+                        f"query file '{p}': line {lineno} 'vector' has a "
+                        f"value not convertible to float: {exc}"
+                    ) from exc
                 if dim == 0:
                     dim = len(row)
                 elif len(row) != dim:
@@ -901,46 +923,51 @@ def load_paths_manifest(
     ``None`` for a file-level manifest and a path -> declared-symbol-set
     map otherwise (symbol-level ghost detection also requires the chunks
     to carry ``symbols`` metadata).
+
+    Reads line-by-line (never the whole file + a split copy); the
+    ``JSONL_MAX_LINE_CHARS`` cap is checked per streamed line.
     """
     p = Path(path)
-    try:
-        text = p.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SnapshotError(f"could not read paths manifest '{p}': {exc}") from exc
-
     existing: set[str] = set()
     live_symbols: dict[str, set[str]] = {}
-    if p.name.endswith(".jsonl"):
+    is_jsonl = p.name.endswith(".jsonl")
+    if is_jsonl:
         import json as _json
 
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if len(line) > JSONL_MAX_LINE_CHARS:
-                raise SnapshotError(
-                    f"paths manifest '{p}': line {lineno} exceeds "
-                    f"{JSONL_MAX_LINE_CHARS} chars — not a plausible manifest "
-                    "record; refusing to parse it"
-                )
-            try:
-                rec = _json.loads(line)
-            except _json.JSONDecodeError as exc:
-                raise SnapshotError(
-                    f"paths manifest '{p}': line {lineno} is not valid JSON: {exc}"
-                ) from exc
-            if not isinstance(rec, dict) or "path" not in rec:
-                raise SnapshotError(
-                    f"paths manifest '{p}': line {lineno} must be an object with "
-                    "key 'path' (and optionally 'symbols')"
-                )
-            existing.add(str(rec["path"]))
-            if isinstance(rec.get("symbols"), list):
-                live_symbols[str(rec["path"])] = {str(x) for x in rec["symbols"]}
-    else:
-        existing = {
-            line.strip()
-            for line in text.splitlines()
-            if line.strip() and not line.startswith("#")
-        }
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, start=1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if len(line) > JSONL_MAX_LINE_CHARS:
+                    raise SnapshotError(
+                        f"paths manifest '{p}': line {lineno} exceeds "
+                        f"{JSONL_MAX_LINE_CHARS} chars — not a plausible "
+                        "manifest record; refusing to parse it"
+                    )
+                if not is_jsonl:
+                    existing.add(line)
+                    continue
+                try:
+                    rec = _json.loads(line)
+                except _json.JSONDecodeError as exc:
+                    raise SnapshotError(
+                        f"paths manifest '{p}': line {lineno} is not valid "
+                        f"JSON: {exc}"
+                    ) from exc
+                if not isinstance(rec, dict) or "path" not in rec:
+                    raise SnapshotError(
+                        f"paths manifest '{p}': line {lineno} must be an "
+                        "object with key 'path' (and optionally 'symbols')"
+                    )
+                existing.add(str(rec["path"]))
+                if isinstance(rec.get("symbols"), list):
+                    live_symbols[str(rec["path"])] = {
+                        str(x) for x in rec["symbols"]
+                    }
+    except SnapshotError:
+        raise
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SnapshotError(f"could not read paths manifest '{p}': {exc}") from exc
     return existing, (live_symbols or None)

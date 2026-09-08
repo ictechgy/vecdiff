@@ -262,3 +262,18 @@ def test_markdown_escape_keeps_table_rows_intact():
     # a JSON string id can carry a newline; it must not break the table row
     assert "\n" not in _md_escape("chunk\nwith newline")
     assert _md_escape("chunk\r\nwith crlf") == "chunk  with crlf"
+
+
+def test_cli_huge_integer_exits_3_without_traceback(tmp_path, capsys):
+    # malformed-but-valid-JSON input must be a hard error (exit 3), never
+    # an uncaught OverflowError (traceback / exit 1)
+    good = write_dir(tmp_path / "a", make_ids(4), np.eye(4, 8, dtype=np.float32))
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(
+        '{"id": "c1", "vector": [1' + "0" * 400 + "]}\n", encoding="utf-8"
+    )
+    code = main([str(good), str(bad)])
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "vecdiff: error:" in err
+    assert "Traceback" not in err

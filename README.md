@@ -64,7 +64,7 @@ vecdiff reports graded signals, never a verdict like "model B is better". Thresh
 | N5 largest bit-identical group | < 5 members | ≥ 5 members | ≥ 5% of index |
 | Q1 mean query Jaccard | ≥ 0.90 | ≥ 0.70 | < 0.70 |
 | Q1 heavy-loss queries (Jaccard ≤ 0.30) | < 2% | < 10% | ≥ 10% |
-| N3 rot chunks (orphans + ghosts) / n | 0 | < 5% | ≥ 5% |
+| N3 rot chunks (orphans + ghosts) / path-reported chunks | 0 | < 5% | ≥ 5% |
 
 The N2 outlier check is skipped (reported green, with the reason inline) when norm variance is ≈ 0 — e.g. embedders that return pre-normalized unit vectors, where z-scores would be float rounding noise.
 

@@ -549,3 +549,41 @@ def test_n4_duplicate_flood_guard_keeps_pair_count_exact():
     assert stats["affected_ids"] == 0
     assert stats["examples"] == []
     assert findings[0].severity == "red"
+
+
+def test_n3_partial_path_metadata_not_false_orphans():
+    # 19 of 20 chunks carry no path ("" from a partial jsonl export): they
+    # must be excluded from the audit, not counted as 19 orphans / red
+    n = 20
+    ids = make_ids(n)
+    paths = [""] * n
+    paths[7] = "src/a.py"
+    snap = make_snapshot(ids, _base(n, 8), paths=paths)
+    stats, findings = checks.check_orphans(snap, "A", {"src/a.py"})
+    assert stats["with_path_metadata"] == 1
+    assert stats["without_path_metadata"] == 19
+    assert stats["orphans"] == 0
+    assert stats["rot_fraction"] == 0.0
+    assert findings[0].severity == "green"
+
+
+def test_n3_rot_fraction_denominator_is_path_reported():
+    # the one reported path is gone: rot 1/1 reported (100%), not 1/20
+    n = 20
+    ids = make_ids(n)
+    paths = [""] * n
+    paths[7] = "src/gone.py"
+    snap = make_snapshot(ids, _base(n, 8), paths=paths)
+    stats, findings = checks.check_orphans(snap, "A", {"src/a.py"})
+    assert stats["orphans"] == 1
+    assert stats["rot_fraction"] == 1.0
+    assert findings[0].severity == "red"
+
+
+def test_n3_all_paths_empty_skips_yellow():
+    ids = make_ids(5)
+    snap = make_snapshot(ids, _base(5, 8), paths=[""] * 5)
+    stats, findings = checks.check_orphans(snap, "A", {"src/a.py"})
+    assert stats["with_path_metadata"] == 0
+    assert findings[0].severity == "yellow"
+    assert "no chunk carries a path" in findings[0].message

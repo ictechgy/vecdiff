@@ -1,5 +1,55 @@
 # HANDOFF — what the next session should do
 
+## 2026-09-08 전체 코드 검토 — 수정 완료 (0.4.2.dev0)
+
+- 기준: `main@ac2627b`, 27 commits, 검토 시작 시 워킹트리 clean. 아래 4건은
+  **2026-09-08 후속 세션에서 모두 수정 + 회귀 테스트 추가 완료** (123 passed
+  + 1 intended skip, +11 tests). 아래 원문은 검토 기록으로 보존한다.
+
+### 확인된 수정 필요 사항 — 전부 수정됨
+
+1. **[수정됨] P2 · correctness/reliability — SQLite의 빈 vector BLOB이 정상 입력으로 통과한다.**
+   - 수정: 0길이 BLOB을 행 단위 `SnapshotError`로 거부 (`snapshot.py` sqlite
+     loader). 빈 테이블의 valid-empty 동작은 유지. 회귀:
+     `test_sqlite_empty_blob_rejected`, `test_sqlite_empty_blob_mixed_with_valid_rejected`.
+2. **[수정됨] P2 · correctness — 일부 행의 path 미보고를 사라진 파일로 오판한다.**
+   - 수정: `check_orphans`가 빈 path 청크를 audit에서 제외하고
+     `without_path_metadata`로 분리 계수. 분모(coverage) 규칙을 "path-reported
+     chunks"로 명시 — README/README.ko 신호 테이블 동일 커밋 갱신 (lockstep).
+     회귀: `test_n3_partial_path_metadata_not_false_orphans`,
+     `test_n3_rot_fraction_denominator_is_path_reported`,
+     `test_n3_all_paths_empty_skips_yellow`.
+3. **[수정됨] P2 · reliability — 큰 JSON 정수에서 CLI hard-error 처리를 빠져나온다.**
+   - 수정: snapshot/query 로더의 `float()` 변환을 행 번호 있는
+     `SnapshotError`로 래핑 (OverflowError/ValueError). float32 변환 뒤
+     finite 검사는 기존 `_require_finite`가 이미 담당. 회귀:
+     `test_jsonl_huge_integer_rejected_with_line_number`,
+     `test_query_huge_integer_rejected`,
+     `test_cli_huge_integer_exits_3_without_traceback` (exit 3 + no traceback).
+4. **[수정됨] P3 · performance — paths manifest를 검증 전에 통째로 읽는다.**
+   - 수정: `load_paths_manifest`를 줄 단위 스트리밍으로 교체 (전체
+     read_text + splitlines 이중 복사 제거). line cap·행 번호 유지. 회귀:
+     `test_manifest_last_line_number_preserved_streaming`,
+     `test_manifest_line_cap_rejects_huge_line`,
+     `test_manifest_large_streamed_load` (100k 라인).
+
+### 실행 검증과 제약 (수정 세션 기준)
+
+- `.venv/bin/python -m pytest -q`: **124 collected, 123 passed, 1 skipped**
+  (skip = FAISS 미설정 경로, 의도된 것). CI(FAISS 없음)에서는 적분 테스트가
+  skip되고 이 경로가 실행된다.
+- 합성 demo snapshots `--full --gate`: RED 검출, exit 2 — 수정 후에도 동일.
+
+### 다음 세션 시작
+
+검토 항목은 소진. 아래 "이전 세션 기록"의 optional 과제(실데이터 dogfood,
+홍보 전파, 수요 발생 시 ANN N4)가 다음 순서. 0.4.2 릴리스 준비 완료 상태
+(`0.4.2.dev0`).
+
+---
+
+## 이전 세션 기록 — 작성 당시 상태
+
 Read `AGENTS.md` first (layout, invariants, judgment discipline, test gotchas).
 
 **State at writing (2026-09-07):** main = `0.4.1` **published on PyPI**
@@ -73,6 +123,12 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   snapshot/query/manifest loads, markdown escape handles newlines, Q1
   thresholds alias N1 (drift-proof), stale v0.1 message and CLI --help
   description fixed. 112 tests (+9).
+- **0.4.2.dev0 (unreleased)** — 2026-09-08 code-review fixes: sqlite
+  empty-vector-blob rejection, N3 partial-path coverage rule (empty path =
+  unreported, excluded from the audit; rot fraction over path-reported
+  chunks — README/README.ko lockstep), huge-JSON-integer conversion wrapped
+  as line-numbered SnapshotError (exit 3, no traceback), streaming
+  paths-manifest loader. 123 tests (+11).
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
   lives as a **local-only gitignored file** — never re-commit it. The

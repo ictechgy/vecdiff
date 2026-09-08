@@ -699,3 +699,92 @@ def test_query_loader_chunking_matches_whole_file(tmp_path, rng, monkeypatch):
     ids, loaded = load_query_vectors(tmp_path / "q.jsonl")
     assert ids == [f"q{i}" for i in range(n)]
     np.testing.assert_allclose(loaded, vecs.astype(np.float32), rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-08 review fixes: empty sqlite blobs, huge JSON integers,
+# streaming manifest
+# ---------------------------------------------------------------------------
+
+
+def test_sqlite_empty_blob_rejected(tmp_path):
+    # two empty blobs previously loaded as n=2, dim=0, shape (2, 0) — valid
+    # enough to run checks, mixing malformed input with gate verdicts
+    con = sqlite3.connect(tmp_path / "empty.db")
+    con.execute("CREATE TABLE chunks(id TEXT PRIMARY KEY, vec BLOB)")
+    con.execute("INSERT INTO chunks VALUES ('a', ?)", (b"",))
+    con.execute("INSERT INTO chunks VALUES ('b', ?)", (b"",))
+    con.commit()
+    con.close()
+    with pytest.raises(SnapshotError, match="empty"):
+        load_snapshot(tmp_path / "empty.db")
+
+
+def test_sqlite_empty_blob_mixed_with_valid_rejected(tmp_path):
+    con = sqlite3.connect(tmp_path / "mixed.db")
+    con.execute("CREATE TABLE chunks(id TEXT PRIMARY KEY, vec BLOB)")
+    con.execute(
+        "INSERT INTO chunks VALUES ('a', ?)",
+        (np.array([1.0, 2.0], "<f4").tobytes(),),
+    )
+    con.execute("INSERT INTO chunks VALUES ('b', ?)", (b"",))
+    con.commit()
+    con.close()
+    with pytest.raises(SnapshotError, match="'b'"):
+        load_snapshot(tmp_path / "mixed.db")
+
+
+def test_jsonl_huge_integer_rejected_with_line_number(tmp_path):
+    # a valid-JSON 400-digit integer parses fine; float() used to raise an
+    # uncaught OverflowError (traceback, exit 1)
+    (tmp_path / "big.jsonl").write_text(
+        '{"id": "a", "vector": [1' + "0" * 400 + ', 1.0]}\n', encoding="utf-8"
+    )
+    with pytest.raises(SnapshotError, match="line 1 .*not convertible"):
+        load_snapshot(tmp_path / "big.jsonl")
+
+
+def test_query_huge_integer_rejected(tmp_path):
+    from vecdiff.snapshot import load_query_vectors
+
+    (tmp_path / "q.jsonl").write_text(
+        '{"id": "q", "vector": [1' + "0" * 400 + "]}\n", encoding="utf-8"
+    )
+    with pytest.raises(SnapshotError, match="not convertible"):
+        load_query_vectors(tmp_path / "q.jsonl")
+
+
+def test_manifest_last_line_number_preserved_streaming(tmp_path):
+    from vecdiff.snapshot import load_paths_manifest
+
+    m = tmp_path / "symbols.jsonl"
+    m.write_text(
+        '{"path": "a.py", "symbols": ["x"]}\n' * 500 + "not json\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SnapshotError, match="line 501"):
+        load_paths_manifest(m)
+
+
+def test_manifest_line_cap_rejects_huge_line(tmp_path, monkeypatch):
+    import vecdiff.snapshot as snap_mod
+    from vecdiff.snapshot import load_paths_manifest
+
+    monkeypatch.setattr(snap_mod, "JSONL_MAX_LINE_CHARS", 64)
+    m = tmp_path / "symbols.jsonl"
+    m.write_text('{"path": "' + "x" * 200 + '"}\n', encoding="utf-8")
+    with pytest.raises(SnapshotError, match="exceeds"):
+        load_paths_manifest(m)
+
+
+def test_manifest_large_streamed_load(tmp_path):
+    # streaming loader handles a manifest far larger than any single line
+    from vecdiff.snapshot import load_paths_manifest
+
+    m = tmp_path / "tree.txt"
+    lines = [f"src/mod_{i // 100}/file_{i}.py" for i in range(100_000)]
+    m.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    existing, live = load_paths_manifest(m)
+    assert len(existing) == 100_000
+    assert "src/mod_999/file_99999.py" in existing
+    assert live is None

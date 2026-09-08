@@ -902,12 +902,19 @@ def check_orphans(
       ``symbols`` list are then checked symbol-level: a chunk whose symbols
       disappeared while its file survives is a *ghost* — invisible to the
       file-level check.
+
+    Coverage rule: chunks with no reported path (empty string — e.g. a
+    jsonl export where only some rows carry ``path``) are *excluded* from
+    the audit and counted in ``without_path_metadata``; missing path
+    metadata is not a disappeared file. ``rot_fraction`` is over
+    path-reported chunks, not over ``n``.
     """
     stats: dict = {
         "side": side,
         "n": snap.n,
         "manifest_paths": len(existing_paths),
         "with_path_metadata": 0,
+        "without_path_metadata": 0,
         "symbol_level": bool(live_symbols) and snap.symbols is not None,
         "orphans": 0,
         "ghosts": 0,
@@ -941,11 +948,33 @@ def check_orphans(
     )
     use_symbols = live and snap.symbols is not None
 
+    # path-reported chunks only: an empty path means the export did not
+    # record one, which is not rot
+    reported = [
+        (pos, cid, raw)
+        for pos, (cid, raw) in enumerate(zip(snap.ids, snap.paths))
+        if raw
+    ]
+    stats["with_path_metadata"] = len(reported)
+    stats["without_path_metadata"] = snap.n - len(reported)
+    if not reported:
+        findings.append(
+            Finding(
+                check="N3",
+                severity="yellow",
+                message=(
+                    f"N3 skipped for {side}: no chunk carries a path "
+                    f"({snap.n} chunk(s), all path fields empty)"
+                ),
+                details=stats,
+            )
+        )
+        return stats, findings
+
     orphans: list[str] = []
     orphan_paths: list[str] = []  # paths of the first few orphans (message)
     ghosts: list[tuple[str, str, list[str]]] = []  # (id, path, dead symbols)
-    for pos, (cid, raw) in enumerate(zip(snap.ids, snap.paths)):
-        stats["with_path_metadata"] += 1
+    for pos, cid, raw in reported:
         path = norm(raw)
         if path not in existing:
             orphans.append(cid)
@@ -961,7 +990,7 @@ def check_orphans(
                 ghosts.append((cid, raw, dead))
 
     rot = len(orphans) + len(ghosts)
-    frac = rot / snap.n if snap.n else 0.0
+    frac = rot / len(reported)
     stats["orphans"] = len(orphans)
     stats["ghosts"] = len(ghosts)
     stats["rot_fraction"] = frac
@@ -973,7 +1002,8 @@ def check_orphans(
     if rot == 0:
         sev = "green"
         message = (
-            f"{side}: no rot — all {snap.n} chunk paths exist"
+            f"{side}: no rot — all {len(reported)} path-reported chunk(s) "
+            "clean"
             + (
                 " and all declared symbols are live "
                 f"({len(existing)} manifest paths, symbol-level)"
@@ -1001,8 +1031,8 @@ def check_orphans(
         message = (
             f"{side}: {parts[0]}"
             + (f"; {parts[1]}" if len(parts) > 1 else "")
-            + f" — {frac:.1%} of {snap.n} (thresholds: green == 0, yellow < "
-            f"{N3_ORPHAN_YELLOW:.0%})"
+            + f" — {frac:.1%} of {len(reported)} path-reported "
+            f"(thresholds: green == 0, yellow < {N3_ORPHAN_YELLOW:.0%})"
         )
     findings.append(Finding(check="N3", severity=sev, message=message, details=stats))
     return stats, findings
