@@ -1,64 +1,14 @@
 # HANDOFF — what the next session should do
 
-## 2026-09-08 전체 코드 검토 — 수정 완료, **0.4.2 released on PyPI**
-
-- 검토 4건은 2026-09-08 모두 수정 + 회귀 테스트 추가 완료, 그대로
-  **v0.4.2로 릴리스됨** (workflow green, wheel 직접 다운로드+import 검증;
-  https://github.com/ictechgy/vecdiff/releases/tag/v0.4.2).
-  123 passed + 1 intended skip (+11 tests).
-
-### 확인된 수정 필요 사항 — 전부 수정됨
-
-1. **[수정됨] P2 · correctness/reliability — SQLite의 빈 vector BLOB이 정상 입력으로 통과한다.**
-   - 수정: 0길이 BLOB을 행 단위 `SnapshotError`로 거부 (`snapshot.py` sqlite
-     loader). 빈 테이블의 valid-empty 동작은 유지. 회귀:
-     `test_sqlite_empty_blob_rejected`, `test_sqlite_empty_blob_mixed_with_valid_rejected`.
-2. **[수정됨] P2 · correctness — 일부 행의 path 미보고를 사라진 파일로 오판한다.**
-   - 수정: `check_orphans`가 빈 path 청크를 audit에서 제외하고
-     `without_path_metadata`로 분리 계수. 분모(coverage) 규칙을 "path-reported
-     chunks"로 명시 — README/README.ko 신호 테이블 동일 커밋 갱신 (lockstep).
-     회귀: `test_n3_partial_path_metadata_not_false_orphans`,
-     `test_n3_rot_fraction_denominator_is_path_reported`,
-     `test_n3_all_paths_empty_skips_yellow`.
-3. **[수정됨] P2 · reliability — 큰 JSON 정수에서 CLI hard-error 처리를 빠져나온다.**
-   - 수정: snapshot/query 로더의 `float()` 변환을 행 번호 있는
-     `SnapshotError`로 래핑 (OverflowError/ValueError). float32 변환 뒤
-     finite 검사는 기존 `_require_finite`가 이미 담당. 회귀:
-     `test_jsonl_huge_integer_rejected_with_line_number`,
-     `test_query_huge_integer_rejected`,
-     `test_cli_huge_integer_exits_3_without_traceback` (exit 3 + no traceback).
-4. **[수정됨] P3 · performance — paths manifest를 검증 전에 통째로 읽는다.**
-   - 수정: `load_paths_manifest`를 줄 단위 스트리밍으로 교체 (전체
-     read_text + splitlines 이중 복사 제거). line cap·행 번호 유지. 회귀:
-     `test_manifest_last_line_number_preserved_streaming`,
-     `test_manifest_line_cap_rejects_huge_line`,
-     `test_manifest_large_streamed_load` (100k 라인).
-
-### 실행 검증과 제약 (수정 세션 기준)
-
-- `.venv/bin/python -m pytest -q`: **124 collected, 123 passed, 1 skipped**
-  (skip = FAISS 미설정 경로, 의도된 것). CI(FAISS 없음)에서는 적분 테스트가
-  skip되고 이 경로가 실행된다.
-- 합성 demo snapshots `--full --gate`: RED 검출, exit 2 — 수정 후에도 동일.
-
-### 다음 세션 시작
-
-검토 항목은 소진. 아래 "이전 세션 기록"의 optional 과제(실데이터 dogfood,
-홍보 전파, 수요 발생 시 ANN N4)가 다음 순서. 0.4.2 릴리스 준비 완료 상태
-(`0.4.2.dev0`).
-
----
-
-## 이전 세션 기록 — 작성 당시 상태
-
 Read `AGENTS.md` first (layout, invariants, judgment discipline, test gotchas).
 
-**State at writing (2026-09-07):** main = `0.4.1` **published on PyPI**
-(perf/hardening review; releases v0.4.0 + v0.4.1 both live), 26 commits,
-112 tests: 111 green + 1 intended skip¹. Repo public at
+**State at writing (2026-09-08):** main = `0.4.2` **published on PyPI**
+(correctness/reliability review fixes; releases 0.2.0–0.4.2 all live), 30
+commits, 124 tests: 123 green + 1 intended skip¹. Repo public at
 https://github.com/ictechgy/vecdiff with description + topics set, CI green
-on 3.10 + 3.13. The full v0.1–v0.3 roadmap from the original planning doc
-is shipped; what remains is below, ordered.
+on 3.10 + 3.13. The 2026-09-08 full-code review backlog is exhausted
+(four findings fixed + regression-tested in 0.4.2); what remains is below,
+ordered — all of it is discretionary-value work, no known defects.
 
 ¹ skip = the faiss graceful-degradation test, which only runs *without*
 faiss installed; the dev venv has `faiss-cpu`, so the integration tests run
@@ -66,31 +16,15 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
 
 ## 1. Do next — in this order
 
-- [x] **0.4.0 released 2026-09-07** — published on PyPI (workflow green,
-      wheel verified by direct download + import). Procedure used for
-      0.2.0/0.3.0/0.4.0: set `__version__` in `src/vecdiff/__init__.py`,
-      commit, `git tag vX.Y.Z && git push origin main vX.Y.Z`, `gh release
-      create vX.Y.Z` → `.github/workflows/pypi.yml` runs tests → `uv build`
-      → OIDC trusted publishing (no tokens anywhere; PyPI pending publisher
-      is owner=ictechgy repo=vecdiff workflow=pypi.yml, environment blank —
-      don't add `environment:` to the workflow unless PyPI side changes).
-      After the run, verify with the PyPI JSON API + a clean-venv install;
-      note `uv pip install vecdiff` may serve a stale cache — pin
-      `vecdiff==X.Y.Z` when verifying.
-- [x] **kartograph recipe added 2026-09-07.** kartograph ships a
-      `code-graph` JSON export with opt-in project-relative paths since
-      v0.3.0 (v0.3.1+ recommended; schema verified in
-      `export/GraphJsonRenderer.kt`: nodes carry `usr`/`qualifiedName`/
-      `location.path` + `pathKind`, absolute paths never emitted — join on
-      project-relative paths). Recipe with CLI + Gradle-plugin invocations
-      and the conversion snippet now lives next to the cartograph one in
-      `docs/export_recipes.md`; the vecdiff interface needed no changes.
-- [ ] **(Optional) dogfood the real dev pipeline.** The maintainer's
-      private code-search pipeline (vector DB over Android/iOS codebases)
-      was NOT on this machine (searched 2026-09-06). If it lives elsewhere,
-      two snapshots through the jsonl export + a `--queries-a/b` run on real
+- [ ] **Dogfood the real dev pipeline.** The maintainer's private
+      code-search pipeline (vector DB over Android/iOS codebases) was NOT
+      on this machine (searched 2026-09-06). If it lives elsewhere, two
+      snapshots through the jsonl export + a `--queries-a/b` run on real
       query logs would strengthen the case study beyond the already-shipped
-      real-code surrogate (`docs/case_study/`).
+      real-code surrogate (`docs/case_study/`). The kartograph recipe
+      (0.4.0-era docs) now makes a real **Android symbol-level N3** rot
+      audit possible too — one fresh run would validate the newest surface
+      end to end.
 - [ ] **Launch propagation** (from the planning doc's first-publication
       strategy): get the case study cited in re-embedding / dual-index
       migration guide blogs — no diff tool existed there; the README case
@@ -114,22 +48,22 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   text), FAISS integration tests (local-only).
 - **0.4.0** — N3 symbol-level ghosts: chunk `symbols` metadata, jsonl
   `{path, symbols}` manifest, ghost detection + report columns, cartograph
-  recipe (usr + location.path schema verified). kartograph recipe added
-  post-release (docs-only; see §1).
+  recipe (usr + location.path schema verified).
 - **0.4.1** — perf/structure review fixes: N4 duplicate-flood guard
-  (per-block hit cap; pair count stays exact, affected/examples skipped
-  past 1M hits/block) + upper-triangle-only FLOPs (2x), query-jsonl loader
-  chunked like the snapshot loader, paths-manifest parsing extracted to
-  `snapshot.load_paths_manifest()`, jsonl line sanity cap (4 MB) on
-  snapshot/query/manifest loads, markdown escape handles newlines, Q1
-  thresholds alias N1 (drift-proof), stale v0.1 message and CLI --help
-  description fixed. 112 tests (+9).
-- **0.4.2** — 2026-09-08 code-review fixes: sqlite empty-vector-blob
-  rejection, N3 partial-path coverage rule (empty path = unreported,
-  excluded from the audit; rot fraction over path-reported chunks —
-  README/README.ko lockstep), huge-JSON-integer conversion wrapped as
-  line-numbered SnapshotError (exit 3, no traceback), streaming
+  (per-block hit cap; pair count stays exact) + upper-triangle-only FLOPs
+  (2x), query-jsonl loader chunked, paths-manifest parsing extracted to
+  `snapshot.load_paths_manifest()`, 4 MB jsonl line sanity cap, markdown
+  newline escape, Q1 thresholds alias N1, stale CLI text fixed.
+- **0.4.2** — 2026-09-08 review fixes: sqlite empty-vector-blob rejection
+  (was loading dim=0 as valid), N3 partial-path coverage rule (empty path =
+  unreported, excluded from the audit; rot fraction over path-reported
+  chunks — README/README.ko lockstep), huge-JSON-integer conversion wrapped
+  as line-numbered SnapshotError (exit 3, no traceback), streaming
   paths-manifest loader. 123 tests (+11).
+- **Docs (unreleased on PyPI, post-0.4.1):** kartograph recipe in
+  `docs/export_recipes.md` (code-graph JSON v0.3.1+, join on usr +
+  project-relative paths), README cleanup (threshold-table rendering fix,
+  stale v0.1 header/roadmap removed), README.ko.md added (cross-linked).
 - **Repo history note:** the original Korean planning doc (기획서.md) was
   `git filter-repo`-stripped from all history before going public; it now
   lives as a **local-only gitignored file** — never re-commit it. The
@@ -152,9 +86,24 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   README signal table in the same change (AGENTS.md invariant). Current
   bands: N1 0.90/0.70 + heavy 2%/10%; N2 shift 5%/20%, outliers 1%/5%
   (skipped when norm CV < 1e-6); N4 0/1%/1%; N5 <5 members/5%; Q1 mirrors
-  N1; N3 rot 0/<5%/≥5%.
+  N1 (aliased constants); N3 rot 0/<5%/≥5% **over path-reported chunks**.
 - **Exit codes:** 0/1/2 gate verdicts, 3 hard error; argparse usage errors
   also exit 2 (documented in README — check stderr to distinguish).
+- **Release procedure** (used for 0.2.0–0.4.2): set `__version__` in
+  `src/vecdiff/__init__.py`, commit, `git tag vX.Y.Z && git push origin
+  main vX.Y.Z`, create the GitHub release → `.github/workflows/pypi.yml`
+  runs tests → `uv build` → OIDC trusted publishing (no tokens anywhere;
+  PyPI pending publisher is owner=ictechgy repo=vecdiff workflow=pypi.yml,
+  environment blank — don't add `environment:` unless PyPI side changes).
+  Verify with the PyPI JSON API + a pinned-wheel download/import; the
+  JSON `latest` field lags ~1 minute after publish (CDN cache — seen on
+  both 0.4.1 and 0.4.2; the version-specific endpoint is authoritative
+  immediately).
+- **Sandbox session ops** (if working from the agent-guard environment):
+  `git push` works directly; `gh`/`pip` fail TLS verification — use
+  `git credential fill` + `curl` for GitHub API and PyPI checks; commits
+  need `git -c user.name="Coden" -c user.email="ictechgy@gmail.com"`;
+  /tmp writes are blocked (use the workspace).
 
 ## 4. Context pointers
 
@@ -163,8 +112,9 @@ locally and this one skips. In CI (no faiss) the inverse. Both are correct.
   production index ops. Differentiation vs Ragas/MTEB also in README.
 - Extractor siblings (symbol-graph suppliers for N3): **cartograph**
   (Swift/iOS, github.com/ictechgy/cartograph — usable today) and
-  **kartograph** (Kotlin/Android, github.com/ictechgy/kartograph — blocked
-  upstream, see §1).
+  **kartograph** (Kotlin/Android, github.com/ictechgy/kartograph —
+  recipe live since its code-graph JSON export v0.3.1+; absolute paths
+  are never emitted by design, join on project-relative paths).
 - Other siblings: `../tombstone` (agent negative memory),
   `../agent2perfetto` (session traces) share the local-first /
   graded-findings grammar; `../yield-audit` M9 measures the ROI of the
